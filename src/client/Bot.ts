@@ -65,7 +65,7 @@ export class Bot {
 
     try {
       // Disconnect from Discord
-      await this.ws.disconnect();
+      await this.ws.destroy();
 
       // Disconnect from infrastructure
       await this.disconnectInfrastructure();
@@ -129,22 +129,22 @@ export class Bot {
     logger.info('Setting up event listeners...');
 
     // Handle all gateway dispatch events
-    this.ws.on(WebSocketShardEvents.Dispatch, async (event) => {
-      const { data } = event;
-      
+    this.ws.on(WebSocketShardEvents.Dispatch, async (payload, shardId) => {
       // Dispatch to our event handler
-      await eventHandler.dispatch(data.t, data.d);
+      // payload.t = event type (e.g., 'MESSAGE_CREATE')
+      // payload.d = event data
+      await eventHandler.dispatch(payload.t, payload.d);
     });
 
     // WebSocket error handling
-    this.ws.on(WebSocketShardEvents.Error, ({ error }) => {
+    this.ws.on(WebSocketShardEvents.Error, (error) => {
       logger.error({ error }, 'WebSocket error');
     });
 
     // WebSocket ready
-    this.ws.on(WebSocketShardEvents.Ready, ({ data }) => {
+    this.ws.on(WebSocketShardEvents.Ready, (_data, shardId) => {
       this.isReady = true;
-      logger.info({ shardId: data.shardId }, 'Shard ready');
+      logger.info({ shardId }, 'Shard ready');
     });
 
     logger.info('✅ Event listeners configured');
