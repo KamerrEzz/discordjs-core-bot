@@ -1,5 +1,6 @@
 import { BaseCommand } from '../../../BaseCommand.js';
 import type { CommandContext } from '../../../../../shared/types/discord.js';
+import type { APIApplicationCommandBasicOption } from '@discordjs/core';
 import { API, ApplicationCommandOptionType } from '@discordjs/core';
 import { REST } from '@discordjs/rest';
 import { config } from '../../../../../core/Config.js';
@@ -17,7 +18,7 @@ export class WelcomeCardSubcommand extends BaseCommand {
   private rest = new REST({ version: '10' }).setToken(config.get('DISCORD_TOKEN'));
   private api = new API(this.rest);
 
-  protected getCommandOptions() {
+  public getOptions(): APIApplicationCommandBasicOption[] {
     return [
       {
         type: ApplicationCommandOptionType.Boolean,

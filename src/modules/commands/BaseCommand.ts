@@ -3,6 +3,7 @@ import type {
   APIApplicationCommandOption,
   APIApplicationCommandSubcommandGroupOption,
   APIApplicationCommandSubcommandOption,
+  APIApplicationCommandBasicOption,
   ApplicationCommandOptionType,
 } from '@discordjs/core';
 import type { ChatInputInteraction, CommandContext } from '../../shared/types/discord.js';
@@ -83,7 +84,11 @@ export abstract class BaseCommand {
   /**
    * Get options for a command (to be overridden by subclasses)
    */
-  protected getCommandOptions(command: BaseCommand): APIApplicationCommandOption[] | undefined {
+  protected getCommandOptions(command: BaseCommand): APIApplicationCommandBasicOption[] | undefined {
+    // Check if the command has a getOptions method (for subcommands with their own options)
+    if ('getOptions' in command && typeof command.getOptions === 'function') {
+      return command.getOptions();
+    }
     return undefined;
   }
 
