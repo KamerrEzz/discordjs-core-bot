@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/infrastructure/database/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Guild {
+  id        String   @id
+  prefix    String   @default("!")
+  locale    String   @default("en")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  welcomeConfig WelcomeConfig?
+  ticketConfig  TicketConfig?
+
+  @@index([id])
+}
+
+model WelcomeConfig {
+  guildId      String  @id
+  guild        Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  enabled      Boolean @default(false)
+  channelId    String?
+  cardEnabled  Boolean @default(true)
+  cardSettings Json    @default("{}")
+  message      String?
+}
+
+model TicketConfig {
+  guildId      String           @id
+  guild        Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  enabled      Boolean          @default(false)
+  categoryId   String?
+  logChannelId String?
+  categories   TicketCategory[]
+}
+
+model TicketCategory {
+  id           String       @id @default(cuid())
+  ticketConfig TicketConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+  guildId      String
+  name         String
+  emoji        String?
+  description  String?
+  staffRoles   String[]
+
+  @@index([guildId])
+}
