@@ -35,6 +35,9 @@ import { GuildLevelCommand } from '#modules/commands/impl/guild/index.js';
 import { GuildLevelTopCommand } from '#modules/commands/impl/guild/level/top.js';
 import { GuildLevelShowCommand } from '#modules/commands/impl/guild/level/show.js';
 
+// Test commands
+import { TestComponentsCommand } from '#modules/commands/impl/test/components.js';
+
 // Import systems
 import { WelcomeSystem } from './modules/systems/impl/WelcomeSystem.js';
 import { ModerationSystem } from './modules/systems/impl/ModerationSystem.js';
@@ -60,6 +63,7 @@ async function bootstrap() {
     // Register commands
     commandRegistry.register(new PingCommand());
     commandRegistry.register(new ReloadCommand());
+    commandRegistry.register(new TestComponentsCommand());
     
     // Guild level commands: /guild level top|show
     const guildLevelCommand = new GuildLevelCommand();

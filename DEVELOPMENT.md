@@ -310,7 +310,7 @@ export class WelcomeCardSubcommand extends BaseCommand {
     category: "config",
   };
 
-  protected getCommandOptions() {
+  protected getOptions() {
     return [
       {
         type: ApplicationCommandOptionType.Boolean,
@@ -627,6 +627,241 @@ src/modules/commands/impl/
 │   ├── index.ts           # Parent command (if has subcommands)
 │   ├── <command>.ts       # Standalone command or subcommand
 │   └── <group>/
+```
+
+---
+
+## Component System (Buttons, Select Menus, Modals)
+
+### Architecture Overview
+
+The component system follows SOLID principles with clear separation of concerns:
+
+```
+src/modules/components/
+├── ComponentHandler.ts      # Factory pattern for component management
+├── ComponentManager.ts      # Advanced lifecycle management with caching
+├── BaseComponent.ts          # Abstract base class for all components
+├── BaseButton.ts             # Base class for button components
+├── BaseSelectMenu.ts         # Base class for select menu components
+└── impl/
+    └── <category>/
+        └── <component>.ts      # Concrete component implementations
+```
+
+### Creating a Button Component
+
+```typescript
+import { BaseButton } from "#modules/components/BaseButton.js";
+import type { ComponentContext } from "#modules/components/ComponentHandler.js";
+import { ButtonStyle } from "@discordjs/core";
+
+export class MyButton extends BaseButton {
+  public readonly customId = "my-namespace:my-button";
+  public readonly style = ButtonStyle.Primary;
+  public readonly label = "Click Me!";
+  public readonly once = true; // Optional: one-time use
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction, userId } = context;
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      content: `Hello <@${userId}>! Button clicked!`,
+      flags: 64, // Ephemeral
+    });
+  }
+}
+```
+
+### Creating a Select Menu Component
+
+```typescript
+import { StringSelectMenu } from "#modules/components/BaseSelectMenu.js";
+import type { ComponentContext } from "#modules/components/ComponentHandler.js";
+
+export class MySelectMenu extends StringSelectMenu {
+  public readonly customId = "my-namespace:my-select";
+  public readonly placeholder = "Choose an option...";
+  public readonly minValues = 1;
+  public readonly maxValues = 3;
+
+  public readonly options = [
+    { label: "Option 1", value: "opt1", description: "First option" },
+    { label: "Option 2", value: "opt2", description: "Second option" },
+  ];
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction, userId, values } = context;
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      content: `<@${userId}> selected: ${values?.join(", ")}`,
+    });
+  }
+}
+```
+
+### Component Context
+
+```typescript
+interface ComponentContext {
+  interaction: any;        // Raw interaction data
+  api: any;                // Discord API instance
+  guildId?: string;        // Server ID (if in guild)
+  userId: string;          // User who clicked/interacted
+  channelId?: string;      // Channel ID
+  message?: any;           // Original message (if applicable)
+  customId: string;        // Component's custom ID
+  values?: string[];         // Selected values (for select menus)
+  componentType: number;   // Component type constant
+}
+```
+
+### Registering Components
+
+```typescript
+import { componentManager } from "#modules/components/ComponentManager.js";
+import { MyButton } from "#modules/components/impl/util/MyButton.js";
+
+// Simple registration
+const button = new MyButton();
+componentManager.registerComponent(button);
+
+// Advanced registration with options
+componentManager.registerComponent(button, {
+  timeout: 30 * 60 * 1000, // 30 minutes
+  metadata: { 
+    originalUserId: "123456789", 
+    someData: "value" 
+  }
+});
+```
+
+### Using Components in Commands
+
+```typescript
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import { componentManager } from "#modules/components/ComponentManager.js";
+import { MyButton } from "#modules/components/impl/util/MyButton.js";
+
+export class MyCommand extends BaseCommand {
+  async execute(context: CommandContext): Promise<void> {
+    const { api, interaction } = context;
+
+    // Create and register component
+    const button = new MyButton();
+    componentManager.registerComponent(button);
+
+    // Send message with component
+    await api.interactions.reply(interaction.id, interaction.token, {
+      content: "Click the button below:",
+      components: [
+        {
+          type: 1, // ActionRow
+          components: [button.build()]
+        }
+      ]
+    });
+  }
+}
+```
+
+### Component Custom ID Format
+
+Components use a namespace-based custom ID system:
+
+- Format: `"namespace:component-id[:metadata-hash]"`
+- Examples: `"leveling:claim-reward"`, `"ticket:close-btn"`, `"util:confirm:abc123"`
+- Metadata hash is automatically generated for components with metadata
+
+### Component Manager Features
+
+```typescript
+// Get component statistics
+const stats = componentManager.getComponentStats("my-namespace:my-button");
+
+// Get all components by namespace
+const components = componentManager.getComponentsByNamespace("my-namespace");
+
+// Check if component is expired
+const expired = componentManager.isComponentExpired("my-namespace:my-button");
+
+// Unregister a component
+componentManager.unregisterComponent("my-namespace:my-button");
+```
+
+### Best Practices for Components
+
+### ✅ DO
+
+1. **Use meaningful namespaces** for organization (`leveling:`, `ticket:`, `util:`)
+2. **Implement proper validation** in the `validate()` method
+3. **Handle errors gracefully** with user-friendly messages
+4. **Use ephemeral responses** for sensitive operations
+5. **Set appropriate timeouts** for temporary components
+6. **Log component usage** for debugging and analytics
+7. **Use the factory pattern** with static methods for complex components
+
+### ❌ DON'T
+
+1. **Never hardcode user IDs** - use metadata or validation
+2. **Never ignore component validation** - always check permissions/context
+3. **Never create long-lived components** without proper cleanup
+4. **Never use generic custom IDs** - be specific to avoid conflicts
+5. **Never forget to handle component errors** - users will see failures
+
+### Advanced Component Patterns
+
+#### Confirmation Dialog Pattern
+
+```typescript
+// Create confirm/cancel button pair
+const [confirmBtn, cancelBtn] = ConfirmButton.createConfirmPair(
+  "delete-message",
+  userId,
+  { messageId: "123456" }
+);
+
+// Register both buttons
+componentManager.registerComponent(confirmBtn);
+componentManager.registerComponent(cancelBtn);
+
+// Send with both buttons
+const row = BaseButton.createRow(confirmBtn, cancelBtn);
+```
+
+#### Dynamic Select Menu Pattern
+
+```typescript
+// Create select menu with dynamic options
+const selectMenu = new StringSelectMenu();
+selectMenu.options = await generateDynamicOptions();
+
+// Register and use
+componentManager.registerComponent(selectMenu);
+```
+
+#### Component with External API
+
+```typescript
+export class WeatherButton extends BaseButton {
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction, userId } = context;
+    
+    // Defer for long operations
+    await api.interactions.defer(interaction.id, interaction.token);
+    
+    // Fetch external data
+    const weather = await fetchWeather(this.metadata.city);
+    
+    // Edit with results
+    await api.interactions.editReply(
+      interaction.application_id,
+      interaction.token,
+      { content: `Weather in ${weather.city}: ${weather.temp}°C` }
+    );
+  }
+}
+```
 │       └── <subcommand>.ts  # Nested subcommand
 ```
 

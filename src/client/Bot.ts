@@ -18,6 +18,7 @@ import { ModerationConfigRepository } from '#infrastructure/database/repositorie
 import { PrismaService } from '#infrastructure/database/prisma.js';
 import { RedisClientService } from '#infrastructure/cache/RedisClient.js';
 import { SystemManager } from '#modules/systems/SystemManager.js';
+import { componentManager } from '#modules/components/ComponentManager.js';
 
 /**
  * Main Bot Client
@@ -79,6 +80,9 @@ export class Bot {
     logger.info('Stopping bot...');
 
     try {
+      // Stop component cleanup
+      componentManager.stopCleanupInterval();
+      
       // Disconnect from Discord
       await this.ws.destroy();
 
