@@ -1,6 +1,6 @@
-import { BaseCommand } from '../../BaseCommand.js';
-import type { CommandContext } from '../../../../shared/types/discord.js';
-import { EmbedBuilder, Colors } from '../../../../shared/utils/embed.js';
+import { BaseCommand } from '#modules/commands/BaseCommand.js';
+import type { CommandContext } from '#shared/types/discord.js';
+import { EmbedBuilder, Colors } from '#shared/utils/embed.js';
 
 export class PingCommand extends BaseCommand {
   public readonly meta = {

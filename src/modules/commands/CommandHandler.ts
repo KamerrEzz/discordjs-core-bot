@@ -1,9 +1,9 @@
 import { API, Routes } from '@discordjs/core';
-import type { ChatInputInteraction, CommandContext } from '../../shared/types/discord.js';
+import type { ChatInputInteraction, CommandContext } from '#shared/types/discord.js';
 import { commandRegistry } from './CommandRegistry.js';
-import { logger } from '../../core/Logger.js';
-import { config } from '../../core/Config.js';
-import { AppError, ErrorCode } from '../../shared/errors/AppError.js';
+import { logger } from '#core/Logger.js';
+import { config } from '#core/Config.js';
+import { AppError, ErrorCode } from '#shared/errors/AppError.js';
 
 /**
  * Command Handler

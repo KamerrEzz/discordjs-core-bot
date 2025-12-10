@@ -1,19 +1,19 @@
 import { GatewayIntentBits } from '@discordjs/core';
-import { Bot } from './client/Bot.js';
-import { config } from './core/Config.js';
-import { logger } from './core/Logger.js';
+import { Bot } from '#client/Bot.js';
+import { config } from '#core/Config.js';
+import { logger } from '#core/Logger.js';
 
 // Import and register events
-import { eventHandler } from './modules/events/EventHandler.js';
-import { ReadyEvent } from './modules/events/impl/ready.js';
-import { GuildCreateEvent } from './modules/events/impl/guildCreate.js';
-import { InteractionCreateEvent } from './modules/events/impl/interactionCreate.js';
+import { eventHandler } from '#modules/events/EventHandler.js';
+import { ReadyEvent } from '#modules/events/impl/ready.js';
+import { GuildCreateEvent } from '#modules/events/impl/guildCreate.js';
+import { InteractionCreateEvent } from '#modules/events/impl/interactionCreate.js';
 
 // Import and register commands
-import { commandRegistry } from './modules/commands/CommandRegistry.js';
-import { PingCommand } from './modules/commands/impl/util/ping.js';
-import { ConfigCommand } from './modules/commands/impl/config/index.js';
-import { WelcomeCardSubcommand } from './modules/commands/impl/config/message/welcomecard.js';
+import { commandRegistry } from '#modules/commands/CommandRegistry.js';
+import { PingCommand } from '#modules/commands/impl/util/ping.js';
+import { ConfigCommand } from '#modules/commands/impl/config/index.js';
+import { WelcomeCardSubcommand } from '#modules/commands/impl/config/message/welcomecard.js';
 
 /**
  * Bootstrap the bot

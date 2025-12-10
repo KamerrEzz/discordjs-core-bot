@@ -1,8 +1,8 @@
 import { Guild, Prisma } from '../generated/prisma/client.js';
 import { BaseRepository } from './BaseRepository.js';
 import { prisma } from '../prisma.js';
-import { cacheService } from '../../cache/CacheService.js';
-import { logger } from '../../../core/Logger.js';
+import { cacheService } from '#infrastructure/cache/CacheService.js';
+import { logger } from '#core/Logger.js';
 
 export class GuildRepository extends BaseRepository<
   Guild,

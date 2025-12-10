@@ -1,5 +1,5 @@
 import { BaseEvent, type EventContext } from '../BaseEvent.js';
-import { logger } from '../../../core/Logger.js';
+import { logger } from '#core/Logger.js';
 import type { GatewayReadyDispatchData } from '@discordjs/core';
 
 export class ReadyEvent extends BaseEvent<GatewayReadyDispatchData> {

@@ -1,5 +1,5 @@
-import { BaseCommand } from '../../BaseCommand.js';
-import type { CommandContext } from '../../../../shared/types/discord.js';
+import { BaseCommand } from '#modules/commands/BaseCommand.js';
+import type { CommandContext } from '#shared/types/discord.js';
 import { PermissionFlagsBits } from '@discordjs/core';
 
 /**

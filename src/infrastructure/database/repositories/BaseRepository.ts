@@ -1,6 +1,6 @@
 import type { Prisma } from '../generated/prisma/client.js';
-import { CacheService } from '../../cache/CacheService.js';
-import { logger } from '../../../core/Logger.js';
+import { CacheService } from '#infrastructure/cache/CacheService.js';
+import { logger } from '#core/Logger.js';
 
 export interface RepositoryOptions {
   enableCache?: boolean;

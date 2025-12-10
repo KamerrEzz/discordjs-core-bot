@@ -1,8 +1,8 @@
 import { BaseEvent, type EventContext } from '../BaseEvent.js';
-import { logger } from '../../../core/Logger.js';
+import { logger } from '#core/Logger.js';
 import type { GatewayGuildCreateDispatchData } from '@discordjs/core';
-import { container } from '../../../core/Container.js';
-import { GuildRepository } from '../../../infrastructure/database/repositories/GuildRepository.js';
+import { container } from '#core/Container.js';
+import { GuildRepository } from '#infrastructure/database/repositories/GuildRepository.js';
 
 export class GuildCreateEvent extends BaseEvent<GatewayGuildCreateDispatchData> {
   public readonly name = 'GUILD_CREATE';

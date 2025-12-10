@@ -1,5 +1,5 @@
-import { cacheService } from '../../infrastructure/cache/CacheService.js';
-import { CommandCooldownError } from '../errors/CommandError.js';
+import { cacheService } from '#infrastructure/cache/CacheService.js';
+import { CommandCooldownError } from '#shared/errors/CommandError.js';
 
 export class CooldownManager {
   /**

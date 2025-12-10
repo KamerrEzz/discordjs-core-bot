@@ -7,15 +7,15 @@ import {
   type RESTGetAPIGatewayBotResult,
 } from '@discordjs/core';
 import type { BotOptions } from './types.js';
-import { logger } from '../core/Logger.js';
-import { config } from '../core/Config.js';
-import { container } from '../core/Container.js';
-import { eventHandler } from '../modules/events/EventHandler.js';
-import { commandRegistry } from '../modules/commands/CommandRegistry.js';
-import { CommandHandler } from '../modules/commands/CommandHandler.js';
-import { GuildRepository } from '../infrastructure/database/repositories/GuildRepository.js';
-import { PrismaService } from '../infrastructure/database/prisma.js';
-import { RedisClientService } from '../infrastructure/cache/RedisClient.js';
+import { logger } from '#core/Logger.js';
+import { config } from '#core/Config.js';
+import { container } from '#core/Container.js';
+import { eventHandler } from '#modules/events/EventHandler.js';
+import { commandRegistry } from '#modules/commands/CommandRegistry.js';
+import { CommandHandler } from '#modules/commands/CommandHandler.js';
+import { GuildRepository } from '#infrastructure/database/repositories/GuildRepository.js';
+import { PrismaService } from '#infrastructure/database/prisma.js';
+import { RedisClientService } from '#infrastructure/cache/RedisClient.js';
 
 /**
  * Main Bot Client

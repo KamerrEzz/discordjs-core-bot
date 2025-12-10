@@ -1,9 +1,9 @@
 import { BaseEvent, type EventContext } from '../BaseEvent.js';
-import { logger } from '../../../core/Logger.js';
+import { logger } from '#core/Logger.js';
 import type { GatewayInteractionCreateDispatchData } from '@discordjs/core';
 import { InteractionType } from '@discordjs/core';
-import { container } from '../../../core/Container.js';
-import { CommandHandler } from '../../commands/CommandHandler.js';
+import { container } from '#core/Container.js';
+import { CommandHandler } from '#modules/commands/CommandHandler.js';
 
 export class InteractionCreateEvent extends BaseEvent<GatewayInteractionCreateDispatchData> {
   public readonly name = 'INTERACTION_CREATE';

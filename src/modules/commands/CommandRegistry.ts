@@ -1,5 +1,5 @@
 import { BaseCommand } from './BaseCommand.js';
-import { logger } from '../../core/Logger.js';
+import { logger } from '#core/Logger.js';
 
 /**
  * Command Registry

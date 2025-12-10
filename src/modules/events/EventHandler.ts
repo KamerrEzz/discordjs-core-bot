@@ -1,6 +1,6 @@
 import type { API } from '@discordjs/core';
 import type { BaseEvent, EventContext } from './BaseEvent.js';
-import { logger } from '../../core/Logger.js';
+import { logger } from '#core/Logger.js';
 
 /**
  * Event Handler

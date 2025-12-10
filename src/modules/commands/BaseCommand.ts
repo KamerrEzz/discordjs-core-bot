@@ -6,9 +6,9 @@ import type {
   APIApplicationCommandBasicOption,
   ApplicationCommandOptionType,
 } from '@discordjs/core';
-import type { ChatInputInteraction, CommandContext } from '../../shared/types/discord.js';
-import { logger } from '../../core/Logger.js';
-import { cooldownManager } from '../../shared/utils/cooldown.js';
+import type { ChatInputInteraction, CommandContext } from '#shared/types/discord.js';
+import { logger } from '#core/Logger.js';
+import { cooldownManager } from '#shared/utils/cooldown.js';
 import { PermissionFlagsBits } from '@discordjs/core';
 
 export interface CommandMetadata {

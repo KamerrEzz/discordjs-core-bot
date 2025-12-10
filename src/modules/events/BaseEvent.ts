@@ -1,5 +1,5 @@
 import type { API } from '@discordjs/core';
-import { logger } from '../../core/Logger.js';
+import { logger } from '#core/Logger.js';
 
 /**
  * Event context passed to all events

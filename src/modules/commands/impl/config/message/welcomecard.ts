@@ -1,10 +1,10 @@
-import { BaseCommand } from '../../../BaseCommand.js';
-import type { CommandContext } from '../../../../../shared/types/discord.js';
+import { BaseCommand } from '#modules/commands/BaseCommand.js';
+import type { CommandContext } from '#shared/types/discord.js';
 import type { APIApplicationCommandBasicOption } from '@discordjs/core';
 import { ApplicationCommandOptionType } from '@discordjs/core';
-import { EmbedBuilder, Colors } from '../../../../../shared/utils/embed.js';
-import { container } from '../../../../../core/Container.js';
-import { GuildRepository } from '../../../../../infrastructure/database/repositories/GuildRepository.js';
+import { EmbedBuilder, Colors } from '#shared/utils/embed.js';
+import { container } from '#core/Container.js';
+import { GuildRepository } from '#infrastructure/database/repositories/GuildRepository.js';
 
 export class WelcomeCardSubcommand extends BaseCommand {
   public readonly meta = {
