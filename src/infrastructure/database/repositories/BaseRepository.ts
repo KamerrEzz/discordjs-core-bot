@@ -12,17 +12,19 @@ export interface RepositoryOptions {
  * Base Repository with CRUD operations and optional caching
  */
 export abstract class BaseRepository<T, CreateInput, UpdateInput> {
-  protected abstract modelName: string;
+  protected readonly modelName: string;
 
   constructor(
+    modelName: string,
     protected readonly prisma: any,
     protected readonly cache: CacheService,
     protected readonly options: RepositoryOptions = {}
   ) {
+    this.modelName = modelName;
     this.options = {
       enableCache: false,
       cacheTTL: 3600,
-      cacheNamespace: this.modelName,
+      cacheNamespace: modelName,
       ...options,
     };
   }

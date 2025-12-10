@@ -9,10 +9,8 @@ export class GuildRepository extends BaseRepository<
   Prisma.GuildCreateInput,
   Prisma.GuildUpdateInput
 > {
-  protected modelName = 'guild';
-
   constructor() {
-    super(prisma, cacheService, {
+    super('guild', prisma, cacheService, {
       enableCache: true,
       cacheTTL: 1800, // 30 minutes
       cacheNamespace: 'guild',
