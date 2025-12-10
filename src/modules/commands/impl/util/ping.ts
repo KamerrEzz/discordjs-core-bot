@@ -1,8 +1,5 @@
 import { BaseCommand } from '../../BaseCommand.js';
 import type { CommandContext } from '../../../../shared/types/discord.js';
-import { API } from '@discordjs/core';
-import { REST } from '@discordjs/rest';
-import { config } from '../../../../core/Config.js';
 import { EmbedBuilder, Colors } from '../../../../shared/utils/embed.js';
 
 export class PingCommand extends BaseCommand {
@@ -13,14 +10,12 @@ export class PingCommand extends BaseCommand {
     cooldown: 3,
   };
 
-  private rest = new REST({ version: '10' }).setToken(config.get('DISCORD_TOKEN'));
-  private api = new API(this.rest);
-
   async execute(context: CommandContext): Promise<void> {
+    const { api, interaction } = context;
     const start = Date.now();
 
-    // Send initial response
-    await this.api.interactions.reply(context.interaction.id, context.interaction.token, {
+    // Send initial response using API from context
+    await api.interactions.reply(interaction.id, interaction.token, {
       content: '🏓 Pinging...',
     });
 
@@ -35,9 +30,9 @@ export class PingCommand extends BaseCommand {
       .setTimestamp()
       .toJSON();
 
-    await this.api.interactions.editReply(
-      config.get('DISCORD_CLIENT_ID'),
-      context.interaction.token,
+    await api.interactions.editReply(
+      interaction.application_id,
+      interaction.token,
       {
         content: '',
         embeds: [embed],

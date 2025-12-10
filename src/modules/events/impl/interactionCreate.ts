@@ -1,9 +1,6 @@
-import { BaseEvent } from '../BaseEvent.js';
+import { BaseEvent, type EventContext } from '../BaseEvent.js';
 import { logger } from '../../../core/Logger.js';
-import type { 
-  GatewayInteractionCreateDispatchData,
-  APIInteraction,
-} from '@discordjs/core';
+import type { GatewayInteractionCreateDispatchData } from '@discordjs/core';
 import { InteractionType } from '@discordjs/core';
 import { container } from '../../../core/Container.js';
 import { CommandHandler } from '../../commands/CommandHandler.js';
@@ -12,7 +9,9 @@ export class InteractionCreateEvent extends BaseEvent<GatewayInteractionCreateDi
   public readonly name = 'INTERACTION_CREATE';
   public readonly once = false;
 
-  async execute(data: GatewayInteractionCreateDispatchData): Promise<void> {
+  async execute(context: EventContext<GatewayInteractionCreateDispatchData>): Promise<void> {
+    const { data, api } = context;
+
     // Only handle chat input commands for now
     if (data.type !== InteractionType.ApplicationCommand) {
       return;
@@ -21,7 +20,8 @@ export class InteractionCreateEvent extends BaseEvent<GatewayInteractionCreateDi
     const commandHandler = await container.resolve<CommandHandler>('CommandHandler');
 
     try {
-      await commandHandler.handleInteraction(data as any);
+      // Pass both the interaction data AND the API instance
+      await commandHandler.handleInteraction(data as any, api);
     } catch (error) {
       logger.error(
         {

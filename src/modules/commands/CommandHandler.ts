@@ -1,4 +1,3 @@
-import { REST } from '@discordjs/rest';
 import { API, Routes } from '@discordjs/core';
 import type { ChatInputInteraction, CommandContext } from '../../shared/types/discord.js';
 import { commandRegistry } from './CommandRegistry.js';
@@ -9,20 +8,15 @@ import { AppError, ErrorCode } from '../../shared/errors/AppError.js';
 /**
  * Command Handler
  * Handles command registration and execution
+ * No longer creates its own REST/API - receives API from events
  */
 export class CommandHandler {
-  private rest: REST;
-  private api: API;
-
-  constructor() {
-    this.rest = new REST({ version: '10' }).setToken(config.get('DISCORD_TOKEN'));
-    this.api = new API(this.rest);
-  }
-
   /**
    * Register all commands with Discord
+   * @param api - The API instance from Bot
+   * @param guildId - Optional guild ID for guild-specific commands
    */
-  public async registerCommands(guildId?: string): Promise<void> {
+  public async registerCommands(api: API, guildId?: string): Promise<void> {
     const commands = commandRegistry.getAll();
     const commandsJSON = commands.map(cmd => cmd.toJSON());
 
@@ -31,7 +25,7 @@ export class CommandHandler {
     try {
       if (guildId) {
         // Register guild commands (instant update for development)
-        await this.api.applicationCommands.bulkOverwriteGuildCommands(
+        await api.applicationCommands.bulkOverwriteGuildCommands(
           config.get('DISCORD_CLIENT_ID'),
           guildId,
           commandsJSON
@@ -39,7 +33,7 @@ export class CommandHandler {
         logger.info({ guildId, count: commands.length }, 'Guild commands registered');
       } else {
         // Register global commands (takes up to 1 hour to propagate)
-        await this.api.applicationCommands.bulkOverwriteGlobalCommands(
+        await api.applicationCommands.bulkOverwriteGlobalCommands(
           config.get('DISCORD_CLIENT_ID'),
           commandsJSON
         );
@@ -57,8 +51,10 @@ export class CommandHandler {
 
   /**
    * Handle a command interaction
+   * @param interaction - The interaction data
+   * @param api - The API instance from the event context
    */
-  public async handleInteraction(interaction: ChatInputInteraction): Promise<void> {
+  public async handleInteraction(interaction: ChatInputInteraction, api: API): Promise<void> {
     const commandName = interaction.data.name;
     const command = commandRegistry.get(commandName);
 
@@ -67,9 +63,10 @@ export class CommandHandler {
       return;
     }
 
-    // Build command context
+    // Build command context with API included
     const context: CommandContext = {
       interaction,
+      api,
       guildId: interaction.guild_id!,
       userId: interaction.member?.user?.id || interaction.user!.id,
       channelId: interaction.channel.id,
@@ -150,20 +147,22 @@ export class CommandHandler {
 
   /**
    * Delete all commands (useful for cleanup)
+   * @param api - The API instance
+   * @param guildId - Optional guild ID
    */
-  public async deleteAllCommands(guildId?: string): Promise<void> {
+  public async deleteAllCommands(api: API, guildId?: string): Promise<void> {
     logger.warn({ guildId }, 'Deleting all commands');
 
     try {
       if (guildId) {
-        await this.api.applicationCommands.bulkOverwriteGuildCommands(
+        await api.applicationCommands.bulkOverwriteGuildCommands(
           config.get('DISCORD_CLIENT_ID'),
           guildId,
           []
         );
         logger.info({ guildId }, 'Guild commands deleted');
       } else {
-        await this.api.applicationCommands.bulkOverwriteGlobalCommands(
+        await api.applicationCommands.bulkOverwriteGlobalCommands(
           config.get('DISCORD_CLIENT_ID'),
           []
         );

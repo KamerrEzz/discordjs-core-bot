@@ -4,11 +4,13 @@ import type {
   APIApplicationCommandInteractionDataOption,
   APIApplicationCommandOption,
 } from '@discordjs/core';
+import type { API } from '@discordjs/core';
 
 export type ChatInputInteraction = APIChatInputApplicationCommandInteraction;
 
 export interface CommandContext {
   interaction: ChatInputInteraction;
+  api: API;
   guildId: string;
   userId: string;
   channelId: string;

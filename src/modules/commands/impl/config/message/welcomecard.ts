@@ -1,9 +1,7 @@
 import { BaseCommand } from '../../../BaseCommand.js';
 import type { CommandContext } from '../../../../../shared/types/discord.js';
 import type { APIApplicationCommandBasicOption } from '@discordjs/core';
-import { API, ApplicationCommandOptionType } from '@discordjs/core';
-import { REST } from '@discordjs/rest';
-import { config } from '../../../../../core/Config.js';
+import { ApplicationCommandOptionType } from '@discordjs/core';
 import { EmbedBuilder, Colors } from '../../../../../shared/utils/embed.js';
 import { container } from '../../../../../core/Container.js';
 import { GuildRepository } from '../../../../../infrastructure/database/repositories/GuildRepository.js';
@@ -14,9 +12,6 @@ export class WelcomeCardSubcommand extends BaseCommand {
     description: 'Configure the welcome card settings',
     category: 'config',
   };
-
-  private rest = new REST({ version: '10' }).setToken(config.get('DISCORD_TOKEN'));
-  private api = new API(this.rest);
 
   public getOptions(): APIApplicationCommandBasicOption[] {
     return [
@@ -36,8 +31,10 @@ export class WelcomeCardSubcommand extends BaseCommand {
   }
 
   async execute(context: CommandContext): Promise<void> {
-    const enabled = context.options.get('enabled') as boolean;
-    const channelId = context.options.get('channel') as string | undefined;
+    const { api, interaction, options } = context;
+    
+    const enabled = options.get('enabled') as boolean;
+    const channelId = options.get('channel') as string | undefined;
 
     const guildRepo = await container.resolve<GuildRepository>('GuildRepository');
 
@@ -60,7 +57,8 @@ export class WelcomeCardSubcommand extends BaseCommand {
       ];
     }
 
-    await this.api.interactions.reply(context.interaction.id, context.interaction.token, {
+    // Use API from context instead of creating our own
+    await api.interactions.reply(interaction.id, interaction.token, {
       embeds: [embed],
     });
   }

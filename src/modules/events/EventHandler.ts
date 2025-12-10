@@ -1,10 +1,11 @@
-import type { GatewayDispatchPayload } from '@discordjs/core';
-import { BaseEvent } from './BaseEvent.js';
+import type { API } from '@discordjs/core';
+import type { BaseEvent, EventContext } from './BaseEvent.js';
 import { logger } from '../../core/Logger.js';
 
 /**
  * Event Handler
  * Manages event registration and dispatching
+ * Now passes { data, api, shardId } context to events
  */
 export class EventHandler {
   private events = new Map<string, BaseEvent[]>();
@@ -30,9 +31,11 @@ export class EventHandler {
   }
 
   /**
-   * Dispatch an event
+   * Dispatch an event with full context from @discordjs/core Client
+   * @param eventName - The event name (e.g., 'INTERACTION_CREATE')
+   * @param context - The full event context { data, api, shardId }
    */
-  public async dispatch(eventName: string, data: any): Promise<void> {
+  public async dispatch<T = any>(eventName: string, context: EventContext<T>): Promise<void> {
     const handlers = this.events.get(eventName);
 
     if (!handlers || handlers.length === 0) {
@@ -41,8 +44,8 @@ export class EventHandler {
 
     logger.debug({ event: eventName }, 'Dispatching event');
 
-    // Execute all handlers for this event
-    const promises = handlers.map(handler => handler.handle(data));
+    // Execute all handlers for this event, passing the full context
+    const promises = handlers.map(handler => handler.handle(context));
     await Promise.all(promises);
 
     // Remove 'once' handlers after execution

@@ -1,6 +1,11 @@
 import { WebSocketManager, WebSocketShardEvents } from '@discordjs/ws';
 import { REST } from '@discordjs/rest';
-import { API, GatewayDispatchEvents } from '@discordjs/core';
+import { 
+  API, 
+  Client, 
+  GatewayDispatchEvents,
+  type RESTGetAPIGatewayBotResult,
+} from '@discordjs/core';
 import type { BotOptions } from './types.js';
 import { logger } from '../core/Logger.js';
 import { config } from '../core/Config.js';
@@ -14,11 +19,13 @@ import { RedisClientService } from '../infrastructure/cache/RedisClient.js';
 
 /**
  * Main Bot Client
+ * Uses @discordjs/core Client for proper event handling with API context
  */
 export class Bot {
   private ws: WebSocketManager;
   private rest: REST;
   private api: API;
+  private client: Client;
   private isReady = false;
 
   constructor(private options: BotOptions) {
@@ -29,6 +36,10 @@ export class Bot {
       intents: options.intents,
       rest: this.rest,
     });
+    
+    // Create Client from @discordjs/core - this wraps REST and Gateway
+    // and emits events with { data, api, shardId }
+    this.client = new Client({ rest: this.rest, gateway: this.ws });
   }
 
   /**
@@ -44,7 +55,7 @@ export class Bot {
       // Register dependencies
       await this.registerDependencies();
 
-      // Setup event listeners
+      // Setup event listeners using Client (not WebSocketManager directly)
       this.setupEventListeners();
 
       // Connect to Discord Gateway
@@ -123,28 +134,40 @@ export class Bot {
   }
 
   /**
-   * Setup event listeners for Discord Gateway
+   * Setup event listeners using @discordjs/core Client
+   * The Client emits events with { data, api, shardId } context
    */
   private setupEventListeners(): void {
     logger.info('Setting up event listeners...');
 
-    // Handle all gateway dispatch events
-    this.ws.on(WebSocketShardEvents.Dispatch, async (payload, shardId) => {
-      // Dispatch to our event handler
-      // payload.t = event type (e.g., 'MESSAGE_CREATE')
-      // payload.d = event data
-      await eventHandler.dispatch(payload.t, payload.d);
+    // Use client.on() instead of ws.on() - this gives us the API in each event
+    // All gateway dispatch events are forwarded to our EventHandler
+    this.client.on(GatewayDispatchEvents.Ready, async (event) => {
+      this.isReady = true;
+      logger.info({ shardId: event.shardId }, 'Shard ready');
+      await eventHandler.dispatch('READY', event);
     });
 
-    // WebSocket error handling
+    this.client.on(GatewayDispatchEvents.GuildCreate, async (event) => {
+      await eventHandler.dispatch('GUILD_CREATE', event);
+    });
+
+    this.client.on(GatewayDispatchEvents.GuildDelete, async (event) => {
+      await eventHandler.dispatch('GUILD_DELETE', event);
+    });
+
+    this.client.on(GatewayDispatchEvents.InteractionCreate, async (event) => {
+      // event contains { data, api, shardId }
+      await eventHandler.dispatch('INTERACTION_CREATE', event);
+    });
+
+    this.client.on(GatewayDispatchEvents.MessageCreate, async (event) => {
+      await eventHandler.dispatch('MESSAGE_CREATE', event);
+    });
+
+    // WebSocket error handling (still use ws for these low-level events)
     this.ws.on(WebSocketShardEvents.Error, (error) => {
       logger.error({ error }, 'WebSocket error');
-    });
-
-    // WebSocket ready
-    this.ws.on(WebSocketShardEvents.Ready, (_data, shardId) => {
-      this.isReady = true;
-      logger.info({ shardId }, 'Shard ready');
     });
 
     logger.info('✅ Event listeners configured');
@@ -155,7 +178,7 @@ export class Bot {
    */
   public async registerCommands(guildId?: string): Promise<void> {
     const commandHandler = await container.resolve<CommandHandler>('CommandHandler');
-    await commandHandler.registerCommands(guildId);
+    await commandHandler.registerCommands(this.api, guildId);
   }
 
   /**
