@@ -1,5 +1,5 @@
 import type { 
-  RESTPostAPIApplicationCommandsJSONBody,
+  RESTPostAPIChatInputApplicationCommandsJSONBody,
   APIApplicationCommandOption,
   APIApplicationCommandSubcommandGroupOption,
   APIApplicationCommandSubcommandOption,
@@ -42,7 +42,7 @@ export abstract class BaseCommand {
   /**
    * Build command data for Discord API
    */
-  public toJSON(): RESTPostAPIApplicationCommandsJSONBody {
+  public toJSON(): RESTPostAPIChatInputApplicationCommandsJSONBody {
     const options: APIApplicationCommandOption[] = [];
 
     // Add subcommand groups

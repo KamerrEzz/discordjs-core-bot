@@ -120,11 +120,32 @@ export class CommandHandler {
       return options;
     }
 
-    for (const option of interaction.data.options) {
-      options.set(option.name, option.value);
-    }
+    this.extractOptions(interaction.data.options, options);
 
     return options;
+  }
+
+  /**
+   * Recursively extract options from the interaction data
+   */
+  private extractOptions(
+    optionsList: ChatInputInteraction['data']['options'],
+    options: Map<string, any>
+  ): void {
+    if (!optionsList) return;
+
+    for (const option of optionsList) {
+      // Check if this is a subcommand or subcommand group (types 1 and 2)
+      if ('options' in option && option.options) {
+        // Recursively extract nested options
+        this.extractOptions(option.options, options);
+      }
+      
+      // Check if this option has a value (regular options like string, integer, boolean, etc.)
+      if ('value' in option) {
+        options.set(option.name, option.value);
+      }
+    }
   }
 
   /**
