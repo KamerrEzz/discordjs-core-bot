@@ -14,6 +14,7 @@ import { eventHandler } from '#modules/events/EventHandler.js';
 import { commandRegistry } from '#modules/commands/CommandRegistry.js';
 import { CommandHandler } from '#modules/commands/CommandHandler.js';
 import { GuildRepository } from '#infrastructure/database/repositories/GuildRepository.js';
+import { ModerationConfigRepository } from '#infrastructure/database/repositories/ModerationConfigRepository.js';
 import { PrismaService } from '#infrastructure/database/prisma.js';
 import { RedisClientService } from '#infrastructure/cache/RedisClient.js';
 
@@ -126,6 +127,7 @@ export class Bot {
 
     // Register repositories
     container.registerSingleton('GuildRepository', () => new GuildRepository());
+    container.registerSingleton('ModerationConfigRepository', () => new ModerationConfigRepository());
 
     // Register handlers
     container.registerSingleton('CommandHandler', () => new CommandHandler());

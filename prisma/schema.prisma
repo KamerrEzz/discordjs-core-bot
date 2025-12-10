@@ -15,10 +15,23 @@ model Guild {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  welcomeConfig WelcomeConfig?
-  ticketConfig  TicketConfig?
+  welcomeConfig    WelcomeConfig?
+  ticketConfig     TicketConfig?
+  moderationConfig ModerationConfig?
 
   @@index([id])
+}
+
+model ModerationConfig {
+  guildId         String   @id
+  guild           Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  antiSpam        Boolean  @default(false)
+  antiLinks       Boolean  @default(false)
+  antiNsfw        Boolean  @default(false)
+  spamThreshold   Int      @default(5) // Max repeated messages before action
+  spamInterval    Int      @default(10) // Time window in seconds
+  whitelistedUrls String[] @default([]) // Allowed URLs
+  logChannelId    String? // Channel to log moderation actions
 }
 
 model WelcomeConfig {
