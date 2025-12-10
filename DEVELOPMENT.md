@@ -7,6 +7,7 @@ This guide explains how to create commands and events for this Discord bot. The 
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
+- [Path Aliases](#path-aliases)
 - [Creating Commands](#creating-commands)
   - [Simple Command](#simple-command)
   - [Command with Options](#command-with-options)
@@ -50,6 +51,32 @@ src/
     └── utils/                    # Utility functions (embeds, cooldowns)
 ```
 
+### Path Aliases
+
+This project uses Node.js subpath imports for cleaner import paths. Instead of relative paths like `../../core/Logger.js`, use:
+
+| Alias               | Maps to                |
+| ------------------- | ---------------------- |
+| `#client/*`         | `src/client/*`         |
+| `#core/*`           | `src/core/*`           |
+| `#modules/*`        | `src/modules/*`        |
+| `#infrastructure/*` | `src/infrastructure/*` |
+| `#shared/*`         | `src/shared/*`         |
+
+**Example:**
+
+```typescript
+// ❌ Before (relative paths)
+import { logger } from "../../../core/Logger.js";
+import { container } from "../../../core/Container.js";
+
+// ✅ After (path aliases)
+import { logger } from "#core/Logger.js";
+import { container } from "#core/Container.js";
+```
+
+> **Note:** Always include the `.js` extension in imports (ESM requirement).
+
 ### Key Concepts
 
 1. **API Propagation**: The `API` instance is created once in `Bot.ts` and passed through events to commands via `context.api`
@@ -65,8 +92,8 @@ src/
 Create a new file in `src/modules/commands/impl/<category>/<command>.ts`:
 
 ```typescript
-import { BaseCommand } from "../../BaseCommand.js";
-import type { CommandContext } from "../../../../shared/types/discord.js";
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import type { CommandContext } from "#shared/types/discord.js";
 
 export class HelloCommand extends BaseCommand {
   // Command metadata
@@ -92,8 +119,8 @@ export class HelloCommand extends BaseCommand {
 ### Command with Options
 
 ```typescript
-import { BaseCommand } from "../../BaseCommand.js";
-import type { CommandContext } from "../../../../shared/types/discord.js";
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import type { CommandContext } from "#shared/types/discord.js";
 import type { APIApplicationCommandBasicOption } from "@discordjs/core";
 import { ApplicationCommandOptionType } from "@discordjs/core";
 
@@ -162,8 +189,8 @@ import { ApplicationCommandOptionType } from "@discordjs/core";
 **Parent command** (`src/modules/commands/impl/moderation/index.ts`):
 
 ```typescript
-import { BaseCommand } from "../../BaseCommand.js";
-import type { CommandContext } from "../../../../shared/types/discord.js";
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import type { CommandContext } from "#shared/types/discord.js";
 import { PermissionFlagsBits } from "@discordjs/core";
 
 export class ModerationCommand extends BaseCommand {
@@ -185,8 +212,8 @@ export class ModerationCommand extends BaseCommand {
 **Subcommand** (`src/modules/commands/impl/moderation/kick.ts`):
 
 ```typescript
-import { BaseCommand } from "../../BaseCommand.js";
-import type { CommandContext } from "../../../../shared/types/discord.js";
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import type { CommandContext } from "#shared/types/discord.js";
 import type { APIApplicationCommandBasicOption } from "@discordjs/core";
 import { ApplicationCommandOptionType } from "@discordjs/core";
 
@@ -239,8 +266,8 @@ export class KickSubcommand extends BaseCommand {
 **Registration** (in `src/index.ts`):
 
 ```typescript
-import { ModerationCommand } from "./modules/commands/impl/moderation/index.js";
-import { KickSubcommand } from "./modules/commands/impl/moderation/kick.js";
+import { ModerationCommand } from "#modules/commands/impl/moderation/index.js";
+import { KickSubcommand } from "#modules/commands/impl/moderation/kick.js";
 
 // Register parent with subcommand
 const modCommand = new ModerationCommand();
@@ -254,8 +281,8 @@ For nested subcommands like `/config message welcomecard`:
 
 ```typescript
 // In src/index.ts
-import { ConfigCommand } from "./modules/commands/impl/config/index.js";
-import { WelcomeCardSubcommand } from "./modules/commands/impl/config/message/welcomecard.js";
+import { ConfigCommand } from "#modules/commands/impl/config/index.js";
+import { WelcomeCardSubcommand } from "#modules/commands/impl/config/message/welcomecard.js";
 
 const configCommand = new ConfigCommand();
 // 'message' is the group name
@@ -272,8 +299,8 @@ This creates: `/config message welcomecard`
 Create a new file in `src/modules/events/impl/<event>.ts`:
 
 ```typescript
-import { BaseEvent, type EventContext } from "../BaseEvent.js";
-import { logger } from "../../../core/Logger.js";
+import { BaseEvent, type EventContext } from "#modules/events/BaseEvent.js";
+import { logger } from "#core/Logger.js";
 import type { GatewayMessageCreateDispatchData } from "@discordjs/core";
 
 export class MessageCreateEvent extends BaseEvent<GatewayMessageCreateDispatchData> {
@@ -321,8 +348,8 @@ export class MessageCreateEvent extends BaseEvent<GatewayMessageCreateDispatchDa
 In `src/index.ts`:
 
 ```typescript
-import { eventHandler } from "./modules/events/EventHandler.js";
-import { MessageCreateEvent } from "./modules/events/impl/messageCreate.js";
+import { eventHandler } from "#modules/events/EventHandler.js";
+import { MessageCreateEvent } from "#modules/events/impl/messageCreate.js";
 
 // Register events
 eventHandler.register(new MessageCreateEvent());
@@ -345,16 +372,16 @@ All registration happens in `src/index.ts`:
 
 ```typescript
 // Import handlers
-import { eventHandler } from "./modules/events/EventHandler.js";
-import { commandRegistry } from "./modules/commands/CommandRegistry.js";
+import { eventHandler } from "#modules/events/EventHandler.js";
+import { commandRegistry } from "#modules/commands/CommandRegistry.js";
 
 // Import events
-import { ReadyEvent } from "./modules/events/impl/ready.js";
-import { InteractionCreateEvent } from "./modules/events/impl/interactionCreate.js";
+import { ReadyEvent } from "#modules/events/impl/ready.js";
+import { InteractionCreateEvent } from "#modules/events/impl/interactionCreate.js";
 
 // Import commands
-import { PingCommand } from "./modules/commands/impl/util/ping.js";
-import { HelloCommand } from "./modules/commands/impl/util/hello.js";
+import { PingCommand } from "#modules/commands/impl/util/ping.js";
+import { HelloCommand } from "#modules/commands/impl/util/hello.js";
 
 async function bootstrap() {
   // Register events
@@ -388,7 +415,7 @@ await bot.registerCommands();
 ### EmbedBuilder
 
 ```typescript
-import { EmbedBuilder, Colors } from "../../../../shared/utils/embed.js";
+import { EmbedBuilder, Colors } from "#shared/utils/embed.js";
 
 const embed = new EmbedBuilder()
   .setTitle("Title")
@@ -409,7 +436,7 @@ await api.interactions.reply(interaction.id, interaction.token, {
 ### Cooldown Manager
 
 ```typescript
-import { cooldownManager } from '../../../../shared/utils/cooldown.js';
+import { cooldownManager } from '#shared/utils/cooldown.js';
 
 // In your command
 async execute(context: CommandContext): Promise<void> {
@@ -437,7 +464,7 @@ async execute(context: CommandContext): Promise<void> {
 ### Logger
 
 ```typescript
-import { logger } from "../../../../core/Logger.js";
+import { logger } from "#core/Logger.js";
 
 logger.info({ userId, guildId }, "Command executed");
 logger.error({ error }, "Something went wrong");
@@ -448,8 +475,8 @@ logger.warn({ warning }, "Warning message");
 ### Container (Dependency Injection)
 
 ```typescript
-import { container } from "../../../../core/Container.js";
-import { GuildRepository } from "../../../../infrastructure/database/repositories/GuildRepository.js";
+import { container } from "#core/Container.js";
+import { GuildRepository } from "#infrastructure/database/repositories/GuildRepository.js";
 
 // Resolve a dependency
 const guildRepo = await container.resolve<GuildRepository>("GuildRepository");
