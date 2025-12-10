@@ -5,6 +5,7 @@ import { InteractionType } from '@discordjs/core';
 import { container } from '#core/Container.js';
 import { CommandHandler } from '#modules/commands/CommandHandler.js';
 import { componentHandler } from '#modules/components/ComponentHandler.js';
+import { EmbedBuilder, Colors } from '#shared/utils/embed.js';
 
 export class InteractionCreateEvent extends BaseEvent<GatewayInteractionCreateDispatchData> {
   public readonly name = 'INTERACTION_CREATE';

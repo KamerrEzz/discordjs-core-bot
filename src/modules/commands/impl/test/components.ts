@@ -6,6 +6,7 @@ import { componentManager } from "#modules/components/ComponentManager.js";
 import { ConfirmButton } from "#modules/components/impl/util/ConfirmButton.js";
 import { RoleSelectMenu } from "#modules/components/impl/util/RoleSelectMenu.js";
 import { BaseButton } from "#modules/components/BaseButton.js";
+import { BaseSelectMenu, ComponentType } from "#modules/components/BaseSelectMenu.js";
 import { ButtonStyle } from "@discordjs/core";
 import { logger } from "#core/Logger.js";
 import type { ComponentContext } from "#modules/components/ComponentHandler.js";
@@ -32,8 +33,10 @@ export class TestComponentsCommand extends BaseCommand {
         required: true,
         choices: [
           { name: "Buttons", value: "buttons" },
-          { name: "Select Menus", value: "selects" },
+          { name: "String Select Menus", value: "string-selects" },
+          { name: "Role Select Menus", value: "role-selects" },
           { name: "Mixed Components", value: "mixed" },
+          { name: "Modal Demo", value: "modal" },
           { name: "Component Stats", value: "stats" },
         ],
       },
@@ -49,8 +52,12 @@ export class TestComponentsCommand extends BaseCommand {
         await this.testButtons(api, interaction, userId);
         break;
       
-      case "selects":
-        await this.testSelectMenus(api, interaction, userId);
+      case "string-selects":
+        await this.testStringSelects(api, interaction, userId);
+        break;
+      
+      case "role-selects":
+        await this.testRoleSelects(api, interaction, userId);
         break;
       
       case "mixed":
@@ -92,7 +99,29 @@ export class TestComponentsCommand extends BaseCommand {
     });
   }
 
-  private async testSelectMenus(api: any, interaction: any, userId: string): Promise<void> {
+  private async testStringSelects(api: any, interaction: any, userId: string): Promise<void> {
+    // Create string select menu
+    const stringSelect = new TestSelectMenu();
+
+    // Register component
+    componentManager.registerComponent(stringSelect);
+
+    const embed = new EmbedBuilder()
+      .setTitle("📋 String Select Menu Test")
+      .setDescription("Use the select menu below to choose from predefined options.")
+      .setColor(Colors.Green)
+      .setTimestamp()
+      .toJSON();
+
+    const selectRow = stringSelect.build();
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      embeds: [embed],
+      components: [{ type: 1, components: [selectRow] }],
+    });
+  }
+
+  private async testRoleSelects(api: any, interaction: any, userId: string): Promise<void> {
     // Create role select menu
     const roleSelect = RoleSelectMenu.createForAction("test-roles", {
       placeholder: "Select roles for testing",
@@ -107,9 +136,9 @@ export class TestComponentsCommand extends BaseCommand {
     componentManager.registerComponent(roleSelect);
 
     const embed = new EmbedBuilder()
-      .setTitle("📋 Select Menu Test")
-      .setDescription("Use the select menu below to choose roles.")
-      .setColor(Colors.Green)
+      .setTitle("� Role Select Menu Test")
+      .setDescription("Use the select menu below to choose roles from this server.")
+      .setColor(Colors.Blue)
       .setTimestamp()
       .toJSON();
 
@@ -125,26 +154,22 @@ export class TestComponentsCommand extends BaseCommand {
     // Create mixed components
     const primaryButton = new TestButton("primary", "Primary", ButtonStyle.Primary);
     const secondaryButton = new TestButton("secondary", "Secondary", ButtonStyle.Secondary);
-    const roleSelect = RoleSelectMenu.createForAction("mixed-roles", {
-      placeholder: "Select a role",
-      minRoles: 1,
-      maxRoles: 1,
-    });
+    const stringSelect = new TestSelectMenu();
 
     // Register all components
     componentManager.registerComponent(primaryButton);
     componentManager.registerComponent(secondaryButton);
-    componentManager.registerComponent(roleSelect);
+    componentManager.registerComponent(stringSelect);
 
     const embed = new EmbedBuilder()
       .setTitle("🎯 Mixed Components Test")
-      .setDescription("Test both buttons and select menus together.")
+      .setDescription("Test buttons and string select menus together.")
       .setColor(Colors.Purple)
       .setTimestamp()
       .toJSON();
 
     const buttonRow = BaseButton.createRow(primaryButton, secondaryButton);
-    const selectRow = { type: 1, components: [roleSelect.build()] };
+    const selectRow = { type: 1, components: [stringSelect.build()] };
 
     await api.interactions.reply(interaction.id, interaction.token, {
       embeds: [embed],
@@ -221,5 +246,54 @@ class TestButton extends BaseButton {
       embeds: [embed],
       flags: 64, // Ephemeral
     });
+  }
+}
+
+/**
+ * Test String Select Menu Component
+ */
+class TestSelectMenu extends BaseSelectMenu {
+  public readonly type = ComponentType.STRING_SELECT;
+  public readonly customId = "test:string-select:demo";
+  public readonly placeholder = "Choose an option...";
+  public readonly minValues = 1;
+  public readonly maxValues = 1;
+
+  public readonly options = [
+    { label: "🎮 Games", value: "games", description: "Gaming related options" },
+    { label: "🎵 Music", value: "music", description: "Music and audio" },
+    { label: "📚 Books", value: "books", description: "Reading and literature" },
+    { label: "🎨 Art", value: "art", description: "Creative and artistic" },
+    { label: "⚽ Sports", value: "sports", description: "Sports and fitness" },
+  ];
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction, userId, values } = context;
+
+    if (!values || values.length === 0) {
+      await api.interactions.reply(interaction.id, interaction.token, {
+        content: "❌ No option selected!",
+        flags: 64, // Ephemeral
+      });
+      return;
+    }
+
+    const selectedValue = values[0];
+    const selectedOption = this.options.find(opt => opt.value === selectedValue);
+
+    const embed = new EmbedBuilder()
+      .setTitle("🎯 Option Selected!")
+      .setDescription(`<@${userId}> selected: **${selectedOption?.label || selectedValue}**`)
+      .addField("Category", selectedOption?.description || "No description")
+      .setColor(Colors.Green)
+      .setTimestamp()
+      .toJSON();
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      embeds: [embed],
+      flags: 64, // Ephemeral
+    });
+
+    logger.info({ userId, selectedValue, selectedOption }, "String select menu used");
   }
 }
