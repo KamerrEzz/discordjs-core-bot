@@ -17,6 +17,7 @@ import { GuildRepository } from '#infrastructure/database/repositories/GuildRepo
 import { ModerationConfigRepository } from '#infrastructure/database/repositories/ModerationConfigRepository.js';
 import { PrismaService } from '#infrastructure/database/prisma.js';
 import { RedisClientService } from '#infrastructure/cache/RedisClient.js';
+import { SystemManager } from '#modules/systems/SystemManager.js';
 
 /**
  * Main Bot Client
@@ -26,6 +27,7 @@ export class Bot {
   private ws: WebSocketManager;
   private rest: REST;
   private api: API;
+  private systemManager: SystemManager;
   private client: Client;
   private isReady = false;
 
@@ -37,6 +39,7 @@ export class Bot {
       intents: options.intents,
       rest: this.rest,
     });
+    this.systemManager = new SystemManager(this);
     
     // Create Client from @discordjs/core - this wraps REST and Gateway
     // and emits events with { data, api, shardId }
@@ -147,6 +150,7 @@ export class Bot {
     this.client.on(GatewayDispatchEvents.Ready, async (event) => {
       this.isReady = true;
       logger.info({ shardId: event.shardId }, 'Shard ready');
+      await this.systemManager.onReady();
       await eventHandler.dispatch('READY', event);
     });
 

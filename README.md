@@ -77,8 +77,11 @@ pnpm dev
 # Build the project
 pnpm build
 
-# Start the bot
+# Start the bot (Single Process - Recommended for < 2500 guilds)
 pnpm start
+
+# Start with Sharding (Multi-Process - For massive scale)
+pnpm start:shards
 ```
 
 ### Register Slash Commands
@@ -256,6 +259,33 @@ const data = await cacheService.getOrSet(
   async () => await fetchFromDatabase(),
   { ttl: 3600 }
 );
+```
+
+### Systems Module
+
+Decoupled logic for background tasks or complex features:
+
+```typescript
+// src/modules/systems/impl/MySystem.ts
+export class MySystem extends BaseSystem {
+  async onInit() {
+    // Initialize system
+  }
+}
+```
+
+### Job Queue (Decoupling)
+
+For heavy tasks (transcriptions, giveaways) that shouldn't block the bot:
+
+```typescript
+// Producer
+await jobQueue.add("transcribe-meeting", { voiceChannelId: "..." });
+
+// Consumer
+await jobQueue.process(async (job) => {
+  // Handle heavy task
+});
 ```
 
 ## 🚦 Environment Variables

@@ -22,6 +22,10 @@ import { LinksSubcommand } from '#modules/commands/impl/config/moderation/links.
 import { NsfwSubcommand } from '#modules/commands/impl/config/moderation/nsfw.js';
 import { LogChannelSubcommand } from '#modules/commands/impl/config/moderation/logchannel.js';
 
+// Import systems
+import { WelcomeSystem } from './modules/systems/impl/WelcomeSystem.js';
+import { ReloadCommand } from './modules/commands/impl/util/reload.js';
+
 /**
  * Bootstrap the bot
  */
@@ -38,6 +42,7 @@ async function bootstrap() {
 
     // Register commands
     commandRegistry.register(new PingCommand());
+    commandRegistry.register(new ReloadCommand());
     
     // Register config command with subcommand groups
     const configCommand = new ConfigCommand();

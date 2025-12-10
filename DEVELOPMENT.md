@@ -31,17 +31,12 @@ src/
 │   ├── Container.ts              # Dependency injection container
 │   └── Logger.ts                 # Pino logger
 ├── modules/
-│   ├── commands/
-│   │   ├── BaseCommand.ts        # Abstract base class for commands
-│   │   ├── CommandHandler.ts     # Handles command execution
-│   │   ├── CommandRegistry.ts    # Stores registered commands
-│   │   └── impl/                 # Command implementations
-│   │       ├── util/             # Utility commands
-│   │       └── config/           # Configuration commands
-│   └── events/
-│       ├── BaseEvent.ts          # Abstract base class for events
-│       ├── EventHandler.ts       # Handles event dispatching
-│       └── impl/                 # Event implementations
+│   ├── commands/                 # Interaction handlers (Slash Commands)
+│   ├── events/                   # Raw Discord Event Listeners (Triggers)
+│   └── systems/                  # Business Logic & Feature Modules (Brain)
+│       ├── BaseSystem.ts         # Abstract base class
+│       ├── SystemManager.ts      # Lifecycle manager
+│       └── impl/                 # Feature implementations (Welcome, Ticket, etc)
 ├── infrastructure/
 │   ├── database/                 # Prisma repositories
 │   └── cache/                    # Redis client
@@ -79,9 +74,100 @@ import { container } from "#core/Container.js";
 
 ### Key Concepts
 
-1. **API Propagation**: The `API` instance is created once in `Bot.ts` and passed through events to commands via `context.api`
-2. **No direct REST/API creation**: Commands NEVER create their own `REST` or `API` instances
-3. **Event Context**: Events receive `{ data, api, shardId }` from `@discordjs/core` Client
+1.  **API Propagation**: The `API` instance is created once in `Bot.ts` and passed through events to commands via `context.api`
+2.  **No direct REST/API creation**: Commands NEVER create their own `REST` or `API` instances
+3.  **Event Context**: Events receive `{ data, api, shardId }` from `@discordjs/core` Client
+
+---
+
+## Systems Architecture (Advanced)
+
+### "Events" vs "Systems" - Who does what?
+
+- **Events (`src/modules/events`)**: These are **dumb triggers**. Their ONLY job is to listen for a Discord Packet (like "User Joined") and tell the relevant System "Hey, this happened". They should contain NO business logic.
+- **Systems (`src/modules/systems`)**: These are the **brains**. They contain all the business logic for a specific feature (Welcome, Tickets, Giveaways). They can subscribe to multiple events, manage intervals, or connect to external APIs.
+
+**Why separate them?**
+
+1.  **Toggleable Features**: You can disable the entire "WelcomeSystem" without editing the core `guildMemberAdd` event.
+2.  **Decoupling**: The Event handler doesn't need to know _how_ to generate a welcome image, just who to call.
+3.  **Scalability**: Systems can easily be moved to separate workers or queues if they get too heavy.
+
+### Creating a New System
+
+1.  **Create the Implementation** in `src/modules/systems/impl/<Feature>System.ts`.
+
+    ```typescript
+    import { BaseSystem } from "../BaseSystem.js";
+    import { logger } from "#core/Logger.js";
+    import { eventHandler } from "#modules/events/EventHandler.js";
+    import { BaseEvent, type EventContext } from "#modules/events/BaseEvent.js";
+    import type { GatewayMessageCreateDispatchData } from "@discordjs/core";
+
+    // 1. Define any internal events IF they are specific to this system
+    // Or prefer using the global events/impl if shared.
+    class MySystemMessageEvent extends BaseEvent<GatewayMessageCreateDispatchData> {
+      public readonly name = "MESSAGE_CREATE";
+      public readonly once = false;
+
+      constructor(private system: MySystem) {
+        super();
+      }
+
+      async execute(
+        context: EventContext<GatewayMessageCreateDispatchData>
+      ): Promise<void> {
+        await this.system.handleMessage(context.data, context.api);
+      }
+    }
+
+    // 2. Define the System Logic
+    export class MySystem extends BaseSystem {
+      public readonly name = "MySystem"; // Unique ID
+
+      // Called when bot starts
+      async onInit(): Promise<void> {
+        // Subscribe to events
+        eventHandler.register(new MySystemMessageEvent(this));
+        logger.info("MySystem initialized!");
+      }
+
+      // Called when Shard 0 is READY
+      async onReady(): Promise<void> {
+        // Start intervals, queues, or initial checks
+        logger.info("MySystem is ready to work");
+      }
+
+      // 3. Implement Business Logic
+      public async handleMessage(
+        data: GatewayMessageCreateDispatchData,
+        api: any
+      ): Promise<void> {
+        if (data.content === "ping system") {
+          logger.info("System received ping");
+        }
+      }
+    }
+    ```
+
+2.  **Register the System** in `src/index.ts`.
+
+    ```typescript
+    import { MySystem } from "#modules/systems/impl/MySystem.js";
+
+    // ... inside bootstrap()
+    await bot.getSystemManager().register(MySystem);
+    ```
+
+### Types of Systems
+
+Use this pattern for complex features that require state or background logic:
+
+- **TicketSystem**: Manages DB config, interacts with `INTERACTION_CREATE` (buttons), `MESSAGE_CREATE` (transcripts), and maybe a `setInterval` to close inactive tickets.
+- **WelcomeSystem**: Listens to `GUILD_MEMBER_ADD`, generates dynamic images (Canvas), and checks DB config.
+- **GiveawaySystem**: Uses `JobQueue` (Redis) to end giveaways at specific times, independent of the bot's uptime.
+- **MusicSystem**: Connects to Lavalink/Lavalink nodes.
+- **LevelingSystem**: Listens to messages, creates a local debounce (Map) to prevent spam XP, and syncs to DB periodically.
 
 ---
 
@@ -186,19 +272,19 @@ import { ApplicationCommandOptionType } from "@discordjs/core";
 
 ### Command with Subcommands
 
-**Parent command** (`src/modules/commands/impl/moderation/index.ts`):
+**Parent command** (`src/modules/commands/impl/config/index.ts`):
 
 ```typescript
 import { BaseCommand } from "#modules/commands/BaseCommand.js";
 import type { CommandContext } from "#shared/types/discord.js";
 import { PermissionFlagsBits } from "@discordjs/core";
 
-export class ModerationCommand extends BaseCommand {
+export class ConfigCommand extends BaseCommand {
   public readonly meta = {
-    name: "mod",
-    description: "Moderation commands",
-    category: "moderation",
-    defaultMemberPermissions: PermissionFlagsBits.ModerateMembers.toString(),
+    name: "config",
+    description: "Configure server settings",
+    category: "config",
+    defaultMemberPermissions: PermissionFlagsBits.ManageGuild.toString(),
     dmPermission: false,
   };
 
@@ -209,56 +295,47 @@ export class ModerationCommand extends BaseCommand {
 }
 ```
 
-**Subcommand** (`src/modules/commands/impl/moderation/kick.ts`):
+**Subcommand** (`src/modules/commands/impl/config/message/welcomecard.ts`):
 
 ```typescript
 import { BaseCommand } from "#modules/commands/BaseCommand.js";
 import type { CommandContext } from "#shared/types/discord.js";
-import type { APIApplicationCommandBasicOption } from "@discordjs/core";
 import { ApplicationCommandOptionType } from "@discordjs/core";
+import { EmbedBuilder, Colors } from "#shared/utils/embed.js";
 
-export class KickSubcommand extends BaseCommand {
+export class WelcomeCardSubcommand extends BaseCommand {
   public readonly meta = {
-    name: "kick",
-    description: "Kick a member from the server",
-    category: "moderation",
+    name: "welcomecard",
+    description: "Configure the welcome card settings",
+    category: "config",
   };
 
-  public getOptions(): APIApplicationCommandBasicOption[] {
+  protected getCommandOptions() {
     return [
       {
-        type: ApplicationCommandOptionType.User,
-        name: "user",
-        description: "The user to kick",
+        type: ApplicationCommandOptionType.Boolean,
+        name: "enabled",
+        description: "Enable or disable welcome cards",
         required: true,
-      },
-      {
-        type: ApplicationCommandOptionType.String,
-        name: "reason",
-        description: "Reason for the kick",
-        required: false,
       },
     ];
   }
 
   async execute(context: CommandContext): Promise<void> {
-    const { api, interaction, options, guildId } = context;
+    const { api, interaction, options } = context;
+    const enabled = options.get("enabled") as boolean;
 
-    const userId = options.get("user") as string;
-    const reason = (options.get("reason") as string) ?? "No reason provided";
+    const embed = new EmbedBuilder()
+      .setTitle("⚙️ Welcome Card Configuration")
+      .setDescription(
+        `Welcome cards have been ${enabled ? "enabled" : "disabled"}`
+      )
+      .setColor(Colors.Green)
+      .toJSON();
 
-    try {
-      await api.guilds.removeMember(guildId, userId, { reason });
-
-      await api.interactions.reply(interaction.id, interaction.token, {
-        content: `✅ Successfully kicked <@${userId}>. Reason: ${reason}`,
-      });
-    } catch (error) {
-      await api.interactions.reply(interaction.id, interaction.token, {
-        content: "❌ Failed to kick the user. Check my permissions.",
-        flags: 64,
-      });
-    }
+    await api.interactions.reply(interaction.id, interaction.token, {
+      embeds: [embed],
+    });
   }
 }
 ```
@@ -266,31 +343,14 @@ export class KickSubcommand extends BaseCommand {
 **Registration** (in `src/index.ts`):
 
 ```typescript
-import { ModerationCommand } from "#modules/commands/impl/moderation/index.js";
-import { KickSubcommand } from "#modules/commands/impl/moderation/kick.js";
-
-// Register parent with subcommand
-const modCommand = new ModerationCommand();
-modCommand.registerSubcommand(new KickSubcommand());
-commandRegistry.register(modCommand);
-```
-
-### Subcommand Groups
-
-For nested subcommands like `/config message welcomecard`:
-
-```typescript
-// In src/index.ts
 import { ConfigCommand } from "#modules/commands/impl/config/index.js";
 import { WelcomeCardSubcommand } from "#modules/commands/impl/config/message/welcomecard.js";
 
 const configCommand = new ConfigCommand();
-// 'message' is the group name
+// Register subcommand under a group 'message'
 configCommand.registerSubcommandGroup("message", new WelcomeCardSubcommand());
 commandRegistry.register(configCommand);
 ```
-
-This creates: `/config message welcomecard`
 
 ---
 
@@ -381,7 +441,7 @@ import { InteractionCreateEvent } from "#modules/events/impl/interactionCreate.j
 
 // Import commands
 import { PingCommand } from "#modules/commands/impl/util/ping.js";
-import { HelloCommand } from "#modules/commands/impl/util/hello.js";
+import { ConfigCommand } from "#modules/commands/impl/config/index.js";
 
 async function bootstrap() {
   // Register events
@@ -390,7 +450,7 @@ async function bootstrap() {
 
   // Register commands
   commandRegistry.register(new PingCommand());
-  commandRegistry.register(new HelloCommand());
+  commandRegistry.register(new ConfigCommand());
 
   // ... rest of bootstrap
 }
