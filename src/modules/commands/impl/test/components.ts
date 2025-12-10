@@ -70,8 +70,8 @@ export class TestComponentsCommand extends BaseCommand {
 
   private async testButtons(api: any, interaction: any, userId: string): Promise<void> {
     // Create test buttons
-    const confirmButton = new ConfirmButton("test-action", "success", { originalUserId: userId });
-    const cancelButton = new ConfirmButton("test-action", "danger", { originalUserId: userId });
+    const confirmButton = new ConfirmButton("test-success", "success", { originalUserId: userId });
+    const cancelButton = new ConfirmButton("test-danger", "danger", { originalUserId: userId });
 
     // Register components
     componentManager.registerComponent(confirmButton);
