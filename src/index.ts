@@ -22,9 +22,23 @@ import { LinksSubcommand } from '#modules/commands/impl/config/moderation/links.
 import { NsfwSubcommand } from '#modules/commands/impl/config/moderation/nsfw.js';
 import { LogChannelSubcommand } from '#modules/commands/impl/config/moderation/logchannel.js';
 
+// Leveling subcommands
+import { LevelingCommand } from '#modules/commands/impl/config/leveling/index.js';
+import { LevelingToggleSubcommand } from '#modules/commands/impl/config/leveling/toggle.js';
+import { LevelingXpRateSubcommand } from '#modules/commands/impl/config/leveling/xp-rate.js';
+import { LevelingResetUserSubcommand } from '#modules/commands/impl/config/leveling/reset-user.js';
+import { LevelingSetLevelSubcommand } from '#modules/commands/impl/config/leveling/set-level.js';
+import { LevelingRoleRewardSubcommand } from '#modules/commands/impl/config/leveling/role-reward.js';
+
+// Guild commands
+import { GuildLevelCommand } from '#modules/commands/impl/guild/level/index.js';
+import { GuildLevelTopCommand } from '#modules/commands/impl/guild/level/top.js';
+import { GuildLevelShowCommand } from '#modules/commands/impl/guild/level/show.js';
+
 // Import systems
 import { WelcomeSystem } from './modules/systems/impl/WelcomeSystem.js';
 import { ModerationSystem } from './modules/systems/impl/ModerationSystem.js';
+import { LevelingSystem } from './modules/systems/impl/LevelingSystem.js';
 import { ReloadCommand } from './modules/commands/impl/util/reload.js';
 
 /**
@@ -47,6 +61,12 @@ async function bootstrap() {
     commandRegistry.register(new PingCommand());
     commandRegistry.register(new ReloadCommand());
     
+    // Guild level commands: /guild level top|show
+    const guildLevelCommand = new GuildLevelCommand();
+    guildLevelCommand.registerSubcommand(new GuildLevelTopCommand());
+    guildLevelCommand.registerSubcommand(new GuildLevelShowCommand());
+    commandRegistry.register(guildLevelCommand);
+    
     // Register config command with subcommand groups
     const configCommand = new ConfigCommand();
     
@@ -57,7 +77,16 @@ async function bootstrap() {
     configCommand.registerSubcommandGroup('moderation', new NsfwSubcommand());
     configCommand.registerSubcommandGroup('moderation', new LogChannelSubcommand());
     
+    // Leveling group: /config leveling toggle|xp-rate|reset-user|set-level|role-reward
+    const levelingCommand = new LevelingCommand();
+    levelingCommand.registerSubcommand(new LevelingToggleSubcommand());
+    levelingCommand.registerSubcommand(new LevelingXpRateSubcommand());
+    levelingCommand.registerSubcommand(new LevelingResetUserSubcommand());
+    levelingCommand.registerSubcommand(new LevelingSetLevelSubcommand());
+    levelingCommand.registerSubcommand(new LevelingRoleRewardSubcommand());
+    
     commandRegistry.register(configCommand);
+    commandRegistry.register(levelingCommand);
     
     logger.info('✅ Commands registered');
 
@@ -74,6 +103,7 @@ async function bootstrap() {
     // Register systems
     await bot.getSystemManager().register(WelcomeSystem);
     await bot.getSystemManager().register(ModerationSystem);
+    await bot.getSystemManager().register(LevelingSystem);
 
     // Handle graceful shutdown
     const shutdown = async (signal: string) => {
@@ -100,7 +130,7 @@ async function bootstrap() {
 
     // Register commands with Discord (optional: pass guildId for instant updates during dev)
     // For production, remove the guildId parameter to register globally
-    // await bot.registerCommands('739306480586588241');
+    await bot.registerCommands('739306480586588241');
     
     logger.info('💡 Tip: Run bot.registerCommands(guildId) to register slash commands');
   } catch (error) {

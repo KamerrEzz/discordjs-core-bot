@@ -18,6 +18,7 @@ model Guild {
   welcomeConfig    WelcomeConfig?
   ticketConfig     TicketConfig?
   moderationConfig ModerationConfig?
+  levelingConfigs  LevelingConfig[]
 
   @@index([id])
 }
@@ -63,4 +64,31 @@ model TicketCategory {
   staffRoles   String[]
 
   @@index([guildId])
+}
+
+model LevelingConfig {
+  guildId        String  @id
+  guild          Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  enabled        Boolean @default(false)
+  xpPerMessage   Int     @default(10) // XP ganado por mensaje
+  xpCooldown     Int     @default(60) // Segundos entre mensajes para ganar XP
+  levelUpMessage String? // Mensaje de subida de nivel (null = desactivado)
+  roleRewards    Json    @default("[]") // Array de {level: number, roleId: string}
+
+  @@index([guildId])
+}
+
+model LevelingUser {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  xp        Int      @default(0)
+  level     Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+  @@index([userId])
+  @@index([guildId, xp])
 }
