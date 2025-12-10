@@ -31,7 +31,7 @@ import { LevelingSetLevelSubcommand } from '#modules/commands/impl/config/leveli
 import { LevelingRoleRewardSubcommand } from '#modules/commands/impl/config/leveling/role-reward.js';
 
 // Guild commands
-import { GuildLevelCommand } from '#modules/commands/impl/guild/level/index.js';
+import { GuildLevelCommand } from '#modules/commands/impl/guild/index.js';
 import { GuildLevelTopCommand } from '#modules/commands/impl/guild/level/top.js';
 import { GuildLevelShowCommand } from '#modules/commands/impl/guild/level/show.js';
 
@@ -63,8 +63,8 @@ async function bootstrap() {
     
     // Guild level commands: /guild level top|show
     const guildLevelCommand = new GuildLevelCommand();
-    guildLevelCommand.registerSubcommand(new GuildLevelTopCommand());
-    guildLevelCommand.registerSubcommand(new GuildLevelShowCommand());
+    guildLevelCommand.registerSubcommandGroup('level', new GuildLevelTopCommand());
+    guildLevelCommand.registerSubcommandGroup('level', new GuildLevelShowCommand());
     commandRegistry.register(guildLevelCommand);
     
     // Register config command with subcommand groups
@@ -78,15 +78,13 @@ async function bootstrap() {
     configCommand.registerSubcommandGroup('moderation', new LogChannelSubcommand());
     
     // Leveling group: /config leveling toggle|xp-rate|reset-user|set-level|role-reward
-    const levelingCommand = new LevelingCommand();
-    levelingCommand.registerSubcommand(new LevelingToggleSubcommand());
-    levelingCommand.registerSubcommand(new LevelingXpRateSubcommand());
-    levelingCommand.registerSubcommand(new LevelingResetUserSubcommand());
-    levelingCommand.registerSubcommand(new LevelingSetLevelSubcommand());
-    levelingCommand.registerSubcommand(new LevelingRoleRewardSubcommand());
+    configCommand.registerSubcommandGroup('level',  new LevelingToggleSubcommand());
+    configCommand.registerSubcommandGroup('level',  new LevelingXpRateSubcommand());
+    configCommand.registerSubcommandGroup('level',  new LevelingResetUserSubcommand());
+    configCommand.registerSubcommandGroup('level',  new LevelingSetLevelSubcommand());
+    configCommand.registerSubcommandGroup('level',  new LevelingRoleRewardSubcommand());
     
     commandRegistry.register(configCommand);
-    commandRegistry.register(levelingCommand);
     
     logger.info('✅ Commands registered');
 
@@ -130,7 +128,7 @@ async function bootstrap() {
 
     // Register commands with Discord (optional: pass guildId for instant updates during dev)
     // For production, remove the guildId parameter to register globally
-    // await bot.registerCommands('739306480586588241');
+    await bot.registerCommands('739306480586588241');
     
     logger.info('💡 Tip: Run bot.registerCommands(guildId) to register slash commands');
   } catch (error) {

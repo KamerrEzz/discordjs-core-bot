@@ -3,8 +3,8 @@ import type { CommandContext } from "#shared/types/discord.js";
 
 export class GuildLevelCommand extends BaseCommand {
   public readonly meta = {
-    name: "level",
-    description: "Leveling system commands",
+    name: "guild",
+    description: "Guild system commands",
     category: "guild",
     dmPermission: false,
   };
