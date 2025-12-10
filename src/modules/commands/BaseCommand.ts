@@ -72,6 +72,14 @@ export abstract class BaseCommand {
       options.push(subOption);
     }
 
+    // Add main command options if no subcommands exist
+    if (options.length === 0) {
+      const mainOptions = this.getCommandOptions(this);
+      if (mainOptions && mainOptions.length > 0) {
+        options.push(...mainOptions);
+      }
+    }
+
     return {
       name: this.meta.name,
       description: this.meta.description,
