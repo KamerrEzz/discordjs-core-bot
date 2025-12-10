@@ -41,9 +41,14 @@ export class LevelingSystem extends BaseSystem {
   }
 
   async onInit(): Promise<void> {
-    this.guildRepo = await container.resolve<GuildRepository>("GuildRepository");
-    eventHandler.register(new LevelingMessageEvent(this));
-    logger.info("LevelingSystem initialized!");
+    try {
+      this.guildRepo = await container.resolve<GuildRepository>("GuildRepository");
+      eventHandler.register(new LevelingMessageEvent(this));
+      logger.info("LevelingSystem initialized!");
+    } catch (error) {
+      logger.error({ error }, "Failed to initialize LevelingSystem - GuildRepository not available");
+      throw error;
+    }
   }
 
   async onReady(): Promise<void> {

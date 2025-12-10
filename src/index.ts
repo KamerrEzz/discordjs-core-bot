@@ -100,6 +100,9 @@ async function bootstrap() {
         GatewayIntentBits.MessageContent, // Needed for moderation
     });
 
+    // Start the bot (registra dependencias e inicializa infraestructura)
+    await bot.start();
+
     // Register systems
     await bot.getSystemManager().register(WelcomeSystem);
     await bot.getSystemManager().register(ModerationSystem);
@@ -125,12 +128,9 @@ async function bootstrap() {
       process.exit(1);
     });
 
-    // Start the bot
-    await bot.start();
-
     // Register commands with Discord (optional: pass guildId for instant updates during dev)
     // For production, remove the guildId parameter to register globally
-    await bot.registerCommands('739306480586588241');
+    // await bot.registerCommands('739306480586588241');
     
     logger.info('💡 Tip: Run bot.registerCommands(guildId) to register slash commands');
   } catch (error) {
