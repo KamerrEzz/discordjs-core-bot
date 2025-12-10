@@ -200,4 +200,10 @@ export class Bot {
   public get ready(): boolean {
     return this.isReady;
   }
+  /**
+   * Get SystemManager instance
+   */
+  public getSystemManager(): SystemManager {
+    return this.systemManager;
+  }
 }

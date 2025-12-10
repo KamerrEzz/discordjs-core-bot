@@ -1,17 +1,16 @@
-import type { API, GatewayMessageCreateDispatchData } from '@discordjs/core';
-import { ModerationConfigRepository } from '#infrastructure/database/repositories/ModerationConfigRepository.js';
-import { cacheService } from '#infrastructure/cache/CacheService.js';
-import { logger } from '#core/Logger.js';
-import { container } from '#core/Container.js';
+import { BaseSystem } from '../BaseSystem.js';
+import { logger } from '../../../core/Logger.js';
+import { container } from '../../../core/Container.js';
+import { eventHandler } from '../../events/EventHandler.js';
+import { BaseEvent, type EventContext } from '../../events/BaseEvent.js';
+import type { GatewayMessageCreateDispatchData, API } from '@discordjs/core';
+import { ModerationConfigRepository } from '../../../infrastructure/database/repositories/ModerationConfigRepository.js';
 
 interface MessageRecord {
   content: string;
   timestamp: number;
 }
 
-/**
- * NSFW domain patterns - common adult content domains
- */
 const NSFW_PATTERNS = [
   /pornhub\.com/i,
   /xvideos\.com/i,
@@ -37,29 +36,38 @@ const NSFW_PATTERNS = [
   /porn/i,
 ];
 
-/**
- * URL detection regex
- */
 const URL_REGEX = /https?:\/\/[^\s<]+[^<.,:;"')\]\s]/gi;
 
-/**
- * Moderation Service
- * Handles message filtering for spam, links, and NSFW content
- */
-export class ModerationService {
+// Internal event handler for the system
+class ModerationMessageEvent extends BaseEvent<GatewayMessageCreateDispatchData> {
+  public readonly name = 'MESSAGE_CREATE';
+  public readonly once = false;
+
+  constructor(private system: ModerationSystem) {
+    super();
+  }
+
+  async execute(context: EventContext<GatewayMessageCreateDispatchData>): Promise<void> {
+    await this.system.processMessage(context.data, context.api);
+  }
+}
+
+export class ModerationSystem extends BaseSystem {
+  public readonly name = 'ModerationSystem';
   private spamCache = new Map<string, MessageRecord[]>();
 
-  /**
-   * Process a message for moderation
-   * Returns true if the message should be deleted
-   */
+  async onInit(): Promise<void> {
+    eventHandler.register(new ModerationMessageEvent(this));
+    logger.debug('ModerationSystem initialized');
+  }
+
   async processMessage(
     message: GatewayMessageCreateDispatchData,
     api: API
-  ): Promise<{ shouldDelete: boolean; reason?: string }> {
+  ): Promise<void> {
     // Ignore bots and DMs
     if (message.author.bot || !message.guild_id) {
-      return { shouldDelete: false };
+      return;
     }
 
     const guildId = message.guild_id;
@@ -68,7 +76,7 @@ export class ModerationService {
 
     // No config means no moderation
     if (!config) {
-      return { shouldDelete: false };
+      return;
     }
 
     // Check anti-spam
@@ -89,7 +97,7 @@ export class ModerationService {
           content: message.content,
           guildId,
         });
-        return { shouldDelete: true, reason: 'Spam detected' };
+        return; // Stop processing if deleted
       }
     }
 
@@ -106,7 +114,7 @@ export class ModerationService {
           matchedUrl: nsfwResult.matchedUrl,
           guildId,
         });
-        return { shouldDelete: true, reason: 'NSFW content detected' };
+        return;
       }
     }
 
@@ -123,16 +131,11 @@ export class ModerationService {
           matchedUrl: linkResult.matchedUrl,
           guildId,
         });
-        return { shouldDelete: true, reason: 'Link detected' };
+        return;
       }
     }
-
-    return { shouldDelete: false };
   }
 
-  /**
-   * Check for spam (repeated messages)
-   */
   private async checkSpam(
     guildId: string,
     userId: string,
@@ -144,19 +147,11 @@ export class ModerationService {
     const now = Date.now();
     const windowMs = intervalSeconds * 1000;
 
-    // Get existing messages for this user
     let messages = this.spamCache.get(key) || [];
-
-    // Filter to only messages within the time window
     messages = messages.filter(m => now - m.timestamp < windowMs);
-
-    // Add current message
     messages.push({ content: content.toLowerCase().trim(), timestamp: now });
-
-    // Update cache
     this.spamCache.set(key, messages);
 
-    // Count repeated messages
     const repeatedCount = messages.filter(
       m => m.content === content.toLowerCase().trim()
     ).length;
@@ -169,12 +164,8 @@ export class ModerationService {
     return { isSpam: false };
   }
 
-  /**
-   * Check for NSFW content
-   */
   private checkNsfw(content: string): { isNsfw: boolean; matchedUrl?: string } {
     const urls = content.match(URL_REGEX) || [];
-
     for (const url of urls) {
       for (const pattern of NSFW_PATTERNS) {
         if (pattern.test(url)) {
@@ -182,41 +173,29 @@ export class ModerationService {
         }
       }
     }
-
-    // Also check content directly for NSFW keywords in URLs
     for (const pattern of NSFW_PATTERNS) {
       if (pattern.test(content)) {
         const match = content.match(pattern);
         return { isNsfw: true, matchedUrl: match?.[0] };
       }
     }
-
     return { isNsfw: false };
   }
 
-  /**
-   * Check for links
-   */
   private checkLinks(
     content: string,
     whitelist: string[]
   ): { hasLinks: boolean; matchedUrl?: string } {
     const urls = content.match(URL_REGEX) || [];
-
     for (const url of urls) {
-      // Check if URL is whitelisted
       const isWhitelisted = whitelist.some(wl => url.includes(wl));
       if (!isWhitelisted) {
         return { hasLinks: true, matchedUrl: url };
       }
     }
-
     return { hasLinks: false };
   }
 
-  /**
-   * Delete a message
-   */
   private async deleteMessage(
     api: API,
     channelId: string,
@@ -230,9 +209,6 @@ export class ModerationService {
     }
   }
 
-  /**
-   * Log moderation action
-   */
   private async logAction(
     api: API,
     logChannelId: string | null,
@@ -246,16 +222,10 @@ export class ModerationService {
     }
   ): Promise<void> {
     logger.info(action, 'Moderation action taken');
-
     if (!logChannelId) return;
 
     try {
-      const typeEmoji = {
-        SPAM: '🔁',
-        LINK: '🔗',
-        NSFW: '🔞',
-      };
-
+      const typeEmoji = { SPAM: '🔁', LINK: '🔗', NSFW: '🔞' };
       await api.channels.createMessage(logChannelId, {
         embeds: [
           {
@@ -278,10 +248,7 @@ export class ModerationService {
     }
   }
 
-  /**
-   * Clear spam cache for a guild (useful when config changes)
-   */
-  clearSpamCache(guildId: string): void {
+  public clearSpamCache(guildId: string): void {
     for (const key of this.spamCache.keys()) {
       if (key.startsWith(guildId)) {
         this.spamCache.delete(key);
@@ -289,5 +256,3 @@ export class ModerationService {
     }
   }
 }
-
-export const moderationService = new ModerationService();

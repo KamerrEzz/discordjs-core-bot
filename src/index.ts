@@ -24,6 +24,7 @@ import { LogChannelSubcommand } from '#modules/commands/impl/config/moderation/l
 
 // Import systems
 import { WelcomeSystem } from './modules/systems/impl/WelcomeSystem.js';
+import { ModerationSystem } from './modules/systems/impl/ModerationSystem.js';
 import { ReloadCommand } from './modules/commands/impl/util/reload.js';
 
 /**
@@ -37,7 +38,9 @@ async function bootstrap() {
     eventHandler.register(new ReadyEvent());
     eventHandler.register(new GuildCreateEvent());
     eventHandler.register(new InteractionCreateEvent());
-    eventHandler.register(new MessageCreateEvent());
+    // Note: MessageCreateEvent (Global) is not strictly needed if only systems use it, 
+    // but useful for generic logging or other global features.
+    // eventHandler.register(new MessageCreateEvent()); 
     logger.info('✅ Events registered');
 
     // Register commands
@@ -51,8 +54,6 @@ async function bootstrap() {
     configCommand.registerSubcommandGroup('message', new WelcomeCardSubcommand());
     
     // Moderation group: /config moderation spamming|links|nsfw|logchannel
-    configCommand.registerSubcommandGroup('moderation', new SpammingSubcommand());
-    configCommand.registerSubcommandGroup('moderation', new LinksSubcommand());
     configCommand.registerSubcommandGroup('moderation', new NsfwSubcommand());
     configCommand.registerSubcommandGroup('moderation', new LogChannelSubcommand());
     
@@ -67,8 +68,12 @@ async function bootstrap() {
         GatewayIntentBits.Guilds |
         GatewayIntentBits.GuildMembers |
         GatewayIntentBits.GuildMessages |
-        GatewayIntentBits.MessageContent, // Required for reading message content
+        GatewayIntentBits.MessageContent, // Needed for moderation
     });
+
+    // Register systems
+    await bot.getSystemManager().register(WelcomeSystem);
+    await bot.getSystemManager().register(ModerationSystem);
 
     // Handle graceful shutdown
     const shutdown = async (signal: string) => {
