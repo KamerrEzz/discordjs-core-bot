@@ -10,6 +10,8 @@ import { BaseSelectMenu, ComponentType } from "#modules/components/BaseSelectMen
 import { ButtonStyle } from "@discordjs/core";
 import { logger } from "#core/Logger.js";
 import type { ComponentContext } from "#modules/components/ComponentHandler.js";
+import { FeedbackModal } from "#modules/components/impl/util/FeedbackModal.js";
+import { componentRegistry } from "#modules/components/ComponentRegistry.js";
 
 /**
  * Test Components Command
@@ -62,6 +64,10 @@ export class TestComponentsCommand extends BaseCommand {
       
       case "mixed":
         await this.testMixedComponents(api, interaction, userId);
+        break;
+      
+      case "modal":
+        await this.testModal(api, interaction, userId);
         break;
       
       case "stats":
@@ -174,6 +180,32 @@ export class TestComponentsCommand extends BaseCommand {
     await api.interactions.reply(interaction.id, interaction.token, {
       embeds: [embed],
       components: [buttonRow, selectRow],
+    });
+  }
+
+  private async testModal(api: any, interaction: any, userId: string): Promise<void> {
+    // Register modal (persistent)
+    const modal = new FeedbackModal();
+    componentRegistry.register(modal);
+
+    // Create button that opens the modal
+    const openModalButton = new OpenModalButton();
+
+    // Register button (dynamic)
+    componentManager.registerComponent(openModalButton);
+
+    const embed = new EmbedBuilder()
+      .setTitle("📝 Modal Test")
+      .setDescription("Click the button below to open a feedback modal.")
+      .setColor(Colors.Purple)
+      .setTimestamp()
+      .toJSON();
+
+    const buttonRow = BaseButton.createRow(openModalButton);
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      embeds: [embed],
+      components: [buttonRow],
     });
   }
 
@@ -295,5 +327,28 @@ class TestSelectMenu extends BaseSelectMenu {
     });
 
     logger.info({ userId, selectedValue, selectedOption }, "String select menu used");
+  }
+}
+
+/**
+ * Button that opens a modal
+ */
+class OpenModalButton extends BaseButton {
+  public readonly customId = "test:open-modal";
+  public readonly style = ButtonStyle.Primary;
+  public readonly label = "Open Feedback Modal";
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction } = context;
+    const modal = new FeedbackModal();
+
+    // Show modal (modals must be shown as a response to an interaction)
+    // Use REST API directly to send modal response (type 9)
+    await api.rest.post(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+      body: {
+        type: 9, // InteractionResponseType.Modal
+        data: modal.build(),
+      },
+    });
   }
 }

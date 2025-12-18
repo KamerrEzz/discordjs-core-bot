@@ -84,7 +84,43 @@ export class InteractionCreateEvent extends BaseEvent<GatewayInteractionCreateDi
    * Handle modal submissions
    */
   private async handleModalSubmit(data: any, api: any): Promise<void> {
-    // TODO: Implement modal handling when needed
-    logger.debug({ customId: data.data?.custom_id }, 'Modal submit interaction received');
+    const { custom_id, components } = data.data;
+    
+    if (!custom_id) {
+      logger.warn('Modal interaction missing custom_id');
+      return;
+    }
+
+    // Parse modal data from components
+    const modalData = new Map<string, string>();
+    if (components && Array.isArray(components)) {
+      for (const row of components) {
+        if (row.type === 1 && row.components) {
+          // ActionRow
+          for (const component of row.components) {
+            if (component.type === 4) {
+              // TextInput
+              modalData.set(component.custom_id, component.value || "");
+            }
+          }
+        }
+      }
+    }
+
+    // Build component context
+    const componentContext = {
+      interaction: data,
+      api,
+      guildId: data.guild_id,
+      userId: data.member?.user?.id || data.user?.id,
+      channelId: data.channel_id,
+      message: data.message,
+      customId: custom_id,
+      componentType: 9, // MODAL
+      modalData,
+    };
+
+    // Dispatch to component handler
+    await componentHandler.dispatch(custom_id, componentContext);
   }
 }

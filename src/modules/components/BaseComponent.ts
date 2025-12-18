@@ -101,4 +101,5 @@ export enum ComponentType {
   ROLE_SELECT = 6,
   MENTIONABLE_SELECT = 7,
   CHANNEL_SELECT = 8,
+  MODAL = 9, // Modal submission (not a component, but handled similarly)
 }

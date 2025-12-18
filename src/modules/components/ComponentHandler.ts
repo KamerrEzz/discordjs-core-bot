@@ -112,4 +112,5 @@ export interface ComponentContext {
   customId: string;
   values?: string[]; // For select menus
   componentType: number;
+  modalData?: Map<string, string>; // For modals - parsed input values
 }

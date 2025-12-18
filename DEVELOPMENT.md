@@ -458,6 +458,184 @@ Use systems for complex features that require state or background logic:
 
 The component system handles buttons, select menus, and modals. Components can be **dynamic** (temporary) or **persistent** (survive bot restarts).
 
+### Modal Components
+
+Modals are forms that appear when triggered by buttons or commands. They allow users to input text data.
+
+#### Creating a Modal
+
+```typescript
+import { BaseModal, TextInputStyle } from "#modules/components/BaseModal.js";
+import type { ComponentContext } from "#modules/components/ComponentHandler.js";
+import { EmbedBuilder, Colors } from "#shared/utils/embed.js";
+
+export class FeedbackModal extends BaseModal {
+  public readonly customId = "util:feedback:modal";
+  public readonly title = "Send Feedback";
+  public readonly inputs = [
+    {
+      customId: "feedback:subject",
+      label: "Subject",
+      style: TextInputStyle.Short, // Single-line input
+      placeholder: "Brief description",
+      required: true,
+      minLength: 3,
+      maxLength: 100,
+    },
+    {
+      customId: "feedback:message",
+      label: "Message",
+      style: TextInputStyle.Paragraph, // Multi-line input
+      placeholder: "Please provide detailed feedback...",
+      required: true,
+      minLength: 10,
+      maxLength: 1000,
+    },
+  ];
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction, userId, modalData } = context;
+
+    if (!modalData) {
+      await api.interactions.reply(interaction.id, interaction.token, {
+        content: "❌ No data received from modal.",
+        flags: 64, // Ephemeral
+      });
+      return;
+    }
+
+    const subject = modalData.get("feedback:subject") || "";
+    const message = modalData.get("feedback:message") || "";
+
+    // Process the modal data
+    const embed = new EmbedBuilder()
+      .setTitle("✅ Feedback Received")
+      .setDescription("Thank you for your feedback!")
+      .addField("Subject", subject)
+      .addField("Message", message)
+      .setColor(Colors.Green)
+      .toJSON();
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      embeds: [embed],
+      flags: 64, // Ephemeral
+    });
+  }
+}
+```
+
+#### Opening a Modal from a Button
+
+```typescript
+import { BaseButton } from "#modules/components/BaseButton.js";
+import type { ComponentContext } from "#modules/components/ComponentHandler.js";
+import { ButtonStyle } from "@discordjs/core";
+import { FeedbackModal } from "#modules/components/impl/util/FeedbackModal.js";
+
+export class OpenModalButton extends BaseButton {
+  public readonly customId = "util:open-feedback-modal";
+  public readonly style = ButtonStyle.Primary;
+  public readonly label = "Open Feedback Modal";
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction } = context;
+    const modal = new FeedbackModal();
+
+    // Show modal (must be shown as a response to an interaction)
+    // Use REST API directly since interactions.reply() wraps in type 4
+    await api.rest.post(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+      body: {
+        type: 9, // InteractionResponseType.Modal
+        data: modal.build(),
+      },
+    });
+  }
+}
+```
+
+#### Opening a Modal from a Command
+
+```typescript
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import type { CommandContext } from "#shared/types/discord.js";
+import { FeedbackModal } from "#modules/components/impl/util/FeedbackModal.js";
+
+export class FeedbackCommand extends BaseCommand {
+  public readonly meta = {
+    name: "feedback",
+    description: "Send feedback",
+    category: "util",
+  };
+
+  async execute(context: CommandContext): Promise<void> {
+    const { api, interaction } = context;
+    const modal = new FeedbackModal();
+
+    // Show modal
+    // Use REST API directly since interactions.reply() wraps in type 4
+    await api.rest.post(`/interactions/${interaction.id}/${interaction.token}/callback`, {
+      body: {
+        type: 9, // InteractionResponseType.Modal
+        data: modal.build(),
+      },
+    });
+  }
+}
+```
+
+#### Modal Text Input Options
+
+```typescript
+interface ModalTextInput {
+  customId: string;        // Unique identifier for the input
+  label: string;           // Label shown above the input (max 45 chars)
+  style: TextInputStyle;   // TextInputStyle.Short or TextInputStyle.Paragraph
+  placeholder?: string;    // Placeholder text
+  value?: string;          // Pre-filled value
+  required?: boolean;       // Whether the input is required
+  minLength?: number;      // Minimum length (0-4000)
+  maxLength?: number;      // Maximum length (1-4000)
+}
+```
+
+#### Modal Constraints
+
+- **Title**: Maximum 45 characters
+- **Inputs**: Maximum 5 text inputs per modal
+- **Label**: Maximum 45 characters per input
+- **Value**: Maximum 4000 characters per input
+- **Short input**: Single-line text
+- **Paragraph input**: Multi-line text
+
+#### Accessing Modal Data
+
+Modal data is automatically parsed and available in `ComponentContext.modalData`:
+
+```typescript
+async execute(context: ComponentContext): Promise<void> {
+  const { modalData } = context;
+
+  // modalData is a Map<string, string>
+  const subject = modalData?.get("feedback:subject") || "";
+  const message = modalData?.get("feedback:message") || "";
+}
+```
+
+#### Registering Persistent Modals
+
+Modals can be registered as persistent components:
+
+```typescript
+// In src/index.ts
+import { componentRegistry } from "#modules/components/ComponentRegistry.js";
+import { FeedbackModal } from "#modules/components/impl/util/FeedbackModal.js";
+
+// Register persistent modal
+componentRegistry.register(new FeedbackModal());
+```
+
+**Note**: Modals don't need to be registered to be shown, but registering them allows them to handle submissions after bot restarts.
+
 ### Architecture
 
 ```
