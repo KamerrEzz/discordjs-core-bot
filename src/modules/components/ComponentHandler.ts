@@ -1,5 +1,6 @@
 import { logger } from "#core/Logger.js";
 import type { BaseComponent } from "./BaseComponent.js";
+import { componentRegistry } from "./ComponentRegistry.js";
 
 /**
  * ComponentHandler - Factory pattern for managing Discord components
@@ -43,9 +44,16 @@ export class ComponentHandler {
 
   /**
    * Dispatch component interaction to registered handler
+   * First checks persistent components (ComponentRegistry), then dynamic components
    */
   public async dispatch(customId: string, context: ComponentContext): Promise<void> {
-    const component = this.components.get(customId);
+    // First, try to get from persistent registry (pass context for factories)
+    let component = componentRegistry.get(customId, context);
+
+    // If not found in persistent registry, try dynamic components
+    if (!component) {
+      component = this.components.get(customId);
+    }
 
     if (!component) {
       logger.warn({ customId }, "No component handler found for customId");
@@ -53,7 +61,7 @@ export class ComponentHandler {
     }
 
     try {
-      await component.execute(context);
+      await component.executeWithValidation(context);
       logger.debug({ customId, type: component.getType() }, "Component executed successfully");
     } catch (error) {
       logger.error({ error, customId, type: component.getType() }, "Component execution failed");

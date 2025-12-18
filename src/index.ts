@@ -38,6 +38,10 @@ import { GuildLevelShowCommand } from '#modules/commands/impl/guild/level/show.j
 // Test commands
 import { TestComponentsCommand } from '#modules/commands/impl/test/components.js';
 
+// Import and register persistent components
+import { componentRegistry } from '#modules/components/ComponentRegistry.js';
+import { ConfirmButtonFactory } from '#modules/components/impl/util/ConfirmButton.js';
+
 // Import systems
 import { WelcomeSystem } from './modules/systems/impl/WelcomeSystem.js';
 import { ModerationSystem } from './modules/systems/impl/ModerationSystem.js';
@@ -91,6 +95,11 @@ async function bootstrap() {
     commandRegistry.register(configCommand);
     
     logger.info('✅ Commands registered');
+
+    // Register persistent components
+    componentRegistry.registerFactory(new ConfirmButtonFactory());
+    
+    logger.info('✅ Persistent components registered');
 
     // Create bot instance
     const bot = new Bot({

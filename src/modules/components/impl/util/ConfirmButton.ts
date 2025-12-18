@@ -3,6 +3,7 @@ import type { ComponentContext } from "../../ComponentHandler.js";
 import { ButtonStyle } from "@discordjs/core";
 import { EmbedBuilder, Colors } from "#shared/utils/embed.js";
 import { logger } from "#core/Logger.js";
+import type { ComponentFactory } from "../../ComponentFactory.js";
 
 /**
  * Confirm Button Component
@@ -82,5 +83,58 @@ export class ConfirmButton extends BaseButton {
     });
 
     return [confirmButton, cancelButton];
+  }
+}
+
+/**
+ * Factory for creating ConfirmButton instances from customId
+ * Allows ConfirmButton to be persistent across bot restarts
+ * 
+ * CustomId format: util:confirm:${action} or util:confirm:${action}:${style}
+ * Examples:
+ * - util:confirm:test-success -> ConfirmButton with action="test-success", style="success"
+ * - util:confirm:test-danger -> ConfirmButton with action="test-danger", style="danger"
+ * - util:confirm:delete:success -> ConfirmButton with action="delete", style="success"
+ */
+export class ConfirmButtonFactory implements ComponentFactory<ConfirmButton> {
+  private readonly PATTERN = /^util:confirm:(.+?)(?::(success|danger))?$/;
+
+  canHandle(customId: string): boolean {
+    return this.PATTERN.test(customId);
+  }
+
+  create(customId: string, context?: any): ConfirmButton {
+    const match = customId.match(this.PATTERN);
+    if (!match) {
+      throw new Error(`Invalid ConfirmButton customId format: ${customId}`);
+    }
+
+    const action = match[1];
+    const style = (match[2] as "success" | "danger" | undefined) || this.inferStyleFromAction(action);
+
+    // Try to extract metadata from context if available
+    const metadata = context?.metadata;
+
+    return new ConfirmButton(action, style, metadata);
+  }
+
+  getPattern(): string {
+    return "util:confirm";
+  }
+
+  /**
+   * Infer button style from action name
+   * If action ends with "-success" or "-danger", use that style
+   * Otherwise default to "success"
+   */
+  private inferStyleFromAction(action: string): "success" | "danger" {
+    if (action.endsWith("-danger") || action.endsWith("-cancel")) {
+      return "danger";
+    }
+    if (action.endsWith("-success") || action.endsWith("-confirm")) {
+      return "success";
+    }
+    // Default to success for confirm buttons
+    return "success";
   }
 }
