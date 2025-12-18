@@ -1,6 +1,6 @@
 # Discord Bot Development Guide
 
-This guide explains how to create commands and events for this Discord bot. The architecture follows `@discordjs/core` patterns with proper dependency injection and API context propagation.
+Complete guide for developing features in this Discord bot. This documentation explains how to use the codebase without needing to read the source code.
 
 ---
 
@@ -8,13 +8,18 @@ This guide explains how to create commands and events for this Discord bot. The 
 
 - [Architecture Overview](#architecture-overview)
 - [Path Aliases](#path-aliases)
+- [Core Concepts](#core-concepts)
 - [Creating Commands](#creating-commands)
-  - [Simple Command](#simple-command)
-  - [Command with Options](#command-with-options)
-  - [Command with Subcommands](#command-with-subcommands)
-  - [Subcommand Groups](#subcommand-groups)
 - [Creating Events](#creating-events)
-- [Registering Commands and Events](#registering-commands-and-events)
+- [Creating Systems](#creating-systems)
+- [Component System](#component-system)
+  - [Dynamic Components](#dynamic-components)
+  - [Persistent Components](#persistent-components)
+  - [Component Factories](#component-factories)
+- [Database & Repositories](#database--repositories)
+- [Cache System](#cache-system)
+- [Dependency Injection](#dependency-injection)
+- [Configuration](#configuration)
 - [Available Utilities](#available-utilities)
 - [Best Practices](#best-practices)
 
@@ -27,28 +32,43 @@ src/
 ├── client/
 │   └── Bot.ts                    # Main bot client with @discordjs/core Client
 ├── core/
-│   ├── Config.ts                 # Environment configuration
+│   ├── Config.ts                 # Environment configuration (validated)
 │   ├── Container.ts              # Dependency injection container
-│   └── Logger.ts                 # Pino logger
+│   └── Logger.ts                 # Pino logger (structured logging)
 ├── modules/
-│   ├── commands/                 # Interaction handlers (Slash Commands)
-│   ├── events/                   # Raw Discord Event Listeners (Triggers)
-│   └── systems/                  # Business Logic & Feature Modules (Brain)
-│       ├── BaseSystem.ts         # Abstract base class
-│       ├── SystemManager.ts      # Lifecycle manager
-│       └── impl/                 # Feature implementations (Welcome, Ticket, etc)
+│   ├── commands/                 # Slash Commands (user interactions)
+│   │   ├── BaseCommand.ts
+│   │   ├── CommandRegistry.ts    # Persistent command storage
+│   │   └── impl/                 # Command implementations
+│   ├── events/                   # Discord Gateway Events (triggers)
+│   │   ├── BaseEvent.ts
+│   │   ├── EventHandler.ts
+│   │   └── impl/                 # Event implementations
+│   ├── components/               # Buttons, Select Menus, Modals
+│   │   ├── ComponentRegistry.ts  # Persistent component storage
+│   │   ├── ComponentHandler.ts   # Component dispatcher
+│   │   ├── ComponentManager.ts   # Component lifecycle management
+│   │   └── impl/                 # Component implementations
+│   └── systems/                  # Business Logic & Feature Modules
+│       ├── BaseSystem.ts
+│       ├── SystemManager.ts
+│       └── impl/                 # System implementations
 ├── infrastructure/
-│   ├── database/                 # Prisma repositories
-│   └── cache/                    # Redis client
+│   ├── database/                 # Prisma ORM & Repositories
+│   │   ├── repositories/         # Data access layer
+│   │   └── prisma.ts            # Prisma client singleton
+│   └── cache/                    # Redis cache
+│       ├── CacheService.ts       # Cache abstraction
+│       └── RedisClient.js        # Redis connection
 └── shared/
     ├── types/discord.ts          # Discord type definitions
     ├── errors/                   # Custom error classes
-    └── utils/                    # Utility functions (embeds, cooldowns)
+    └── utils/                    # Utility functions
 ```
 
 ### Path Aliases
 
-This project uses Node.js subpath imports for cleaner import paths. Instead of relative paths like `../../core/Logger.js`, use:
+This project uses Node.js subpath imports for cleaner import paths:
 
 | Alias               | Maps to                |
 | ------------------- | ---------------------- |
@@ -72,102 +92,31 @@ import { container } from "#core/Container.js";
 
 > **Note:** Always include the `.js` extension in imports (ESM requirement).
 
-### Key Concepts
-
-1.  **API Propagation**: The `API` instance is created once in `Bot.ts` and passed through events to commands via `context.api`
-2.  **No direct REST/API creation**: Commands NEVER create their own `REST` or `API` instances
-3.  **Event Context**: Events receive `{ data, api, shardId }` from `@discordjs/core` Client
-
 ---
 
-## Systems Architecture (Advanced)
+## Core Concepts
 
-### "Events" vs "Systems" - Who does what?
+### 1. API Propagation
 
-- **Events (`src/modules/events`)**: These are **dumb triggers**. Their ONLY job is to listen for a Discord Packet (like "User Joined") and tell the relevant System "Hey, this happened". They should contain NO business logic.
-- **Systems (`src/modules/systems`)**: These are the **brains**. They contain all the business logic for a specific feature (Welcome, Tickets, Giveaways). They can subscribe to multiple events, manage intervals, or connect to external APIs.
+The `API` instance is created once in `Bot.ts` and passed through events to commands via `context.api`. **NEVER create your own `REST` or `API` instances** in commands, events, or components.
 
-**Why separate them?**
+### 2. Event Context
 
-1.  **Toggleable Features**: You can disable the entire "WelcomeSystem" without editing the core `guildMemberAdd` event.
-2.  **Decoupling**: The Event handler doesn't need to know _how_ to generate a welcome image, just who to call.
-3.  **Scalability**: Systems can easily be moved to separate workers or queues if they get too heavy.
+Events receive `{ data, api, shardId }` from `@discordjs/core` Client. This context is then passed to handlers.
 
-### Creating a New System
+### 3. Registration Pattern
 
-1.  **Create the Implementation** in `src/modules/systems/impl/<Feature>System.ts`.
+- **Commands**: Registered in `CommandRegistry` at startup, then synced with Discord
+- **Events**: Registered in `EventHandler` at startup
+- **Components**: Can be dynamic (temporary) or persistent (registered at startup)
+- **Systems**: Registered in `SystemManager` at startup
 
-    ```typescript
-    import { BaseSystem } from "../BaseSystem.js";
-    import { logger } from "#core/Logger.js";
-    import { eventHandler } from "#modules/events/EventHandler.js";
-    import { BaseEvent, type EventContext } from "#modules/events/BaseEvent.js";
-    import type { GatewayMessageCreateDispatchData } from "@discordjs/core";
+### 4. Separation of Concerns
 
-    // 1. Define any internal events IF they are specific to this system
-    // Or prefer using the global events/impl if shared.
-    class MySystemMessageEvent extends BaseEvent<GatewayMessageCreateDispatchData> {
-      public readonly name = "MESSAGE_CREATE";
-      public readonly once = false;
-
-      constructor(private system: MySystem) {
-        super();
-      }
-
-      async execute(
-        context: EventContext<GatewayMessageCreateDispatchData>
-      ): Promise<void> {
-        await this.system.handleMessage(context.data, context.api);
-      }
-    }
-
-    // 2. Define the System Logic
-    export class MySystem extends BaseSystem {
-      public readonly name = "MySystem"; // Unique ID
-
-      // Called when bot starts
-      async onInit(): Promise<void> {
-        // Subscribe to events
-        eventHandler.register(new MySystemMessageEvent(this));
-        logger.info("MySystem initialized!");
-      }
-
-      // Called when Shard 0 is READY
-      async onReady(): Promise<void> {
-        // Start intervals, queues, or initial checks
-        logger.info("MySystem is ready to work");
-      }
-
-      // 3. Implement Business Logic
-      public async handleMessage(
-        data: GatewayMessageCreateDispatchData,
-        api: any
-      ): Promise<void> {
-        if (data.content === "ping system") {
-          logger.info("System received ping");
-        }
-      }
-    }
-    ```
-
-2.  **Register the System** in `src/index.ts`.
-
-    ```typescript
-    import { MySystem } from "#modules/systems/impl/MySystem.js";
-
-    // ... inside bootstrap()
-    await bot.getSystemManager().register(MySystem);
-    ```
-
-### Types of Systems
-
-Use this pattern for complex features that require state or background logic:
-
-- **TicketSystem**: Manages DB config, interacts with `INTERACTION_CREATE` (buttons), `MESSAGE_CREATE` (transcripts), and maybe a `setInterval` to close inactive tickets.
-- **WelcomeSystem**: Listens to `GUILD_MEMBER_ADD`, generates dynamic images (Canvas), and checks DB config.
-- **GiveawaySystem**: Uses `JobQueue` (Redis) to end giveaways at specific times, independent of the bot's uptime.
-- **MusicSystem**: Connects to Lavalink/Lavalink nodes.
-- **LevelingSystem**: Listens to messages, creates a local debounce (Map) to prevent spam XP, and syncs to DB periodically.
+- **Events**: Dumb triggers - only forward Discord packets to systems
+- **Systems**: Business logic - contain all feature logic
+- **Commands**: User interactions - handle slash commands
+- **Components**: Interactive UI - buttons, select menus, modals
 
 ---
 
@@ -182,11 +131,10 @@ import { BaseCommand } from "#modules/commands/BaseCommand.js";
 import type { CommandContext } from "#shared/types/discord.js";
 
 export class HelloCommand extends BaseCommand {
-  // Command metadata
   public readonly meta = {
-    name: "hello", // Slash command name (lowercase)
-    description: "Say hello!", // Description shown in Discord
-    category: "util", // Category for organization
+    name: "hello",
+    description: "Say hello!",
+    category: "util",
     cooldown: 5, // Optional: cooldown in seconds
     dmPermission: true, // Optional: allow in DMs (default: false)
   };
@@ -194,7 +142,6 @@ export class HelloCommand extends BaseCommand {
   async execute(context: CommandContext): Promise<void> {
     const { api, interaction } = context;
 
-    // Use api from context - NEVER create your own REST/API
     await api.interactions.reply(interaction.id, interaction.token, {
       content: `Hello, <@${context.userId}>! 👋`,
     });
@@ -217,8 +164,7 @@ export class EchoCommand extends BaseCommand {
     category: "util",
   };
 
-  // Define command options
-  public getOptions(): APIApplicationCommandBasicOption[] {
+  protected getOptions(): APIApplicationCommandBasicOption[] {
     return [
       {
         type: ApplicationCommandOptionType.String,
@@ -239,7 +185,6 @@ export class EchoCommand extends BaseCommand {
   async execute(context: CommandContext): Promise<void> {
     const { api, interaction, options } = context;
 
-    // Get options from context.options Map
     const message = options.get("message") as string;
     const ephemeral = (options.get("ephemeral") as boolean) ?? false;
 
@@ -249,25 +194,6 @@ export class EchoCommand extends BaseCommand {
     });
   }
 }
-```
-
-### Available Option Types
-
-```typescript
-import { ApplicationCommandOptionType } from "@discordjs/core";
-
-// ApplicationCommandOptionType values:
-// .Subcommand = 1
-// .SubcommandGroup = 2
-// .String = 3
-// .Integer = 4
-// .Boolean = 5
-// .User = 6
-// .Channel = 7
-// .Role = 8
-// .Mentionable = 9
-// .Number = 10
-// .Attachment = 11
 ```
 
 ### Command with Subcommands
@@ -289,7 +215,6 @@ export class ConfigCommand extends BaseCommand {
   };
 
   async execute(context: CommandContext): Promise<void> {
-    // Parent commands with subcommands should not be called directly
     throw new Error("This command requires a subcommand");
   }
 }
@@ -327,9 +252,7 @@ export class WelcomeCardSubcommand extends BaseCommand {
 
     const embed = new EmbedBuilder()
       .setTitle("⚙️ Welcome Card Configuration")
-      .setDescription(
-        `Welcome cards have been ${enabled ? "enabled" : "disabled"}`
-      )
+      .setDescription(`Welcome cards have been ${enabled ? "enabled" : "disabled"}`)
       .setColor(Colors.Green)
       .toJSON();
 
@@ -343,13 +266,37 @@ export class WelcomeCardSubcommand extends BaseCommand {
 **Registration** (in `src/index.ts`):
 
 ```typescript
+import { commandRegistry } from "#modules/commands/CommandRegistry.js";
 import { ConfigCommand } from "#modules/commands/impl/config/index.js";
 import { WelcomeCardSubcommand } from "#modules/commands/impl/config/message/welcomecard.js";
 
+// Register commands
 const configCommand = new ConfigCommand();
-// Register subcommand under a group 'message'
 configCommand.registerSubcommandGroup("message", new WelcomeCardSubcommand());
 commandRegistry.register(configCommand);
+
+// Register with Discord
+await bot.registerCommands("GUILD_ID"); // Development
+// await bot.registerCommands(); // Production (global)
+```
+
+### Available Option Types
+
+```typescript
+import { ApplicationCommandOptionType } from "@discordjs/core";
+
+// ApplicationCommandOptionType values:
+ApplicationCommandOptionType.Subcommand        // 1
+ApplicationCommandOptionType.SubcommandGroup   // 2
+ApplicationCommandOptionType.String            // 3
+ApplicationCommandOptionType.Integer           // 4
+ApplicationCommandOptionType.Boolean           // 5
+ApplicationCommandOptionType.User               // 6
+ApplicationCommandOptionType.Channel            // 7
+ApplicationCommandOptionType.Role               // 8
+ApplicationCommandOptionType.Mentionable        // 9
+ApplicationCommandOptionType.Number             // 10
+ApplicationCommandOptionType.Attachment         // 11
 ```
 
 ---
@@ -364,18 +311,16 @@ import { logger } from "#core/Logger.js";
 import type { GatewayMessageCreateDispatchData } from "@discordjs/core";
 
 export class MessageCreateEvent extends BaseEvent<GatewayMessageCreateDispatchData> {
-  public readonly name = "MESSAGE_CREATE"; // Gateway event name
+  public readonly name = "MESSAGE_CREATE";
   public readonly once = false; // false = listen continuously
 
-  async execute(
-    context: EventContext<GatewayMessageCreateDispatchData>
-  ): Promise<void> {
+  async execute(context: EventContext<GatewayMessageCreateDispatchData>): Promise<void> {
     const { data, api } = context;
 
     // Ignore bot messages
     if (data.author.bot) return;
 
-    // Example: React to messages containing "hello"
+    // Your logic here
     if (data.content.toLowerCase().includes("hello")) {
       try {
         await api.channels.addMessageReaction(data.channel_id, data.id, "👋");
@@ -390,17 +335,16 @@ export class MessageCreateEvent extends BaseEvent<GatewayMessageCreateDispatchDa
 ### Common Event Types
 
 ```typescript
-// Gateway event names (use these for the `name` property):
-"READY"; // Bot is ready
-"GUILD_CREATE"; // Bot joined a guild or guild became available
-"GUILD_DELETE"; // Bot left a guild or guild became unavailable
-"GUILD_MEMBER_ADD"; // Member joined a guild
-"GUILD_MEMBER_REMOVE"; // Member left a guild
-"MESSAGE_CREATE"; // Message was sent
-"MESSAGE_DELETE"; // Message was deleted
-"MESSAGE_UPDATE"; // Message was edited
-"INTERACTION_CREATE"; // Slash command, button, etc.
-"VOICE_STATE_UPDATE"; // Voice channel changes
+"READY"              // Bot is ready
+"GUILD_CREATE"       // Bot joined a guild
+"GUILD_DELETE"       // Bot left a guild
+"GUILD_MEMBER_ADD"   // Member joined
+"GUILD_MEMBER_REMOVE" // Member left
+"MESSAGE_CREATE"     // Message was sent
+"MESSAGE_DELETE"     // Message was deleted
+"MESSAGE_UPDATE"     // Message was edited
+"INTERACTION_CREATE" // Slash command, button, etc.
+"VOICE_STATE_UPDATE" // Voice channel changes
 ```
 
 ### Event Registration
@@ -415,7 +359,7 @@ import { MessageCreateEvent } from "#modules/events/impl/messageCreate.js";
 eventHandler.register(new MessageCreateEvent());
 ```
 
-**Important**: Also add the event listener in `Bot.ts` if not already present:
+**Important**: The event listener must exist in `Bot.ts`:
 
 ```typescript
 // In Bot.ts setupEventListeners()
@@ -426,46 +370,578 @@ this.client.on(GatewayDispatchEvents.MessageCreate, async (event) => {
 
 ---
 
-## Registering Commands and Events
+## Creating Systems
 
-All registration happens in `src/index.ts`:
+Systems contain business logic for features. They subscribe to events and handle complex operations.
+
+### System Architecture
+
+- **Events**: Dumb triggers - only forward Discord packets to systems
+- **Systems**: Business logic - contain all feature logic
+
+**Why separate them?**
+
+1. **Toggleable Features**: Disable entire systems without editing core events
+2. **Decoupling**: Events don't need to know business logic
+3. **Scalability**: Systems can be moved to separate workers
+
+### Creating a System
+
+1. **Create the Implementation** in `src/modules/systems/impl/<Feature>System.ts`:
 
 ```typescript
-// Import handlers
+import { BaseSystem } from "../BaseSystem.js";
+import { logger } from "#core/Logger.js";
 import { eventHandler } from "#modules/events/EventHandler.js";
-import { commandRegistry } from "#modules/commands/CommandRegistry.js";
+import { BaseEvent, type EventContext } from "#modules/events/BaseEvent.js";
+import type { GatewayMessageCreateDispatchData } from "@discordjs/core";
 
-// Import events
-import { ReadyEvent } from "#modules/events/impl/ready.js";
-import { InteractionCreateEvent } from "#modules/events/impl/interactionCreate.js";
+// Internal event handler for this system
+class MySystemMessageEvent extends BaseEvent<GatewayMessageCreateDispatchData> {
+  public readonly name = "MESSAGE_CREATE";
+  public readonly once = false;
 
-// Import commands
-import { PingCommand } from "#modules/commands/impl/util/ping.js";
-import { ConfigCommand } from "#modules/commands/impl/config/index.js";
+  constructor(private system: MySystem) {
+    super();
+  }
 
-async function bootstrap() {
-  // Register events
-  eventHandler.register(new ReadyEvent());
-  eventHandler.register(new InteractionCreateEvent());
+  async execute(context: EventContext<GatewayMessageCreateDispatchData>): Promise<void> {
+    await this.system.handleMessage(context.data, context.api);
+  }
+}
 
-  // Register commands
-  commandRegistry.register(new PingCommand());
-  commandRegistry.register(new ConfigCommand());
+// System implementation
+export class MySystem extends BaseSystem {
+  public readonly name = "MySystem";
 
-  // ... rest of bootstrap
+  async onInit(): Promise<void> {
+    // Subscribe to events
+    eventHandler.register(new MySystemMessageEvent(this));
+    logger.info("MySystem initialized!");
+  }
+
+  async onReady(): Promise<void> {
+    // Start intervals, queues, or initial checks
+    logger.info("MySystem is ready to work");
+  }
+
+  public async handleMessage(data: GatewayMessageCreateDispatchData, api: any): Promise<void> {
+    // Business logic here
+    if (data.content === "ping system") {
+      logger.info("System received ping");
+    }
+  }
 }
 ```
 
-### Registering with Discord
-
-After registering locally, commands must be synced with Discord:
+2. **Register the System** in `src/index.ts`:
 
 ```typescript
-// For development (instant, guild-specific):
-await bot.registerCommands("YOUR_GUILD_ID");
+import { MySystem } from "#modules/systems/impl/MySystem.js";
 
-// For production (up to 1 hour propagation, global):
-await bot.registerCommands();
+// ... inside bootstrap()
+await bot.getSystemManager().register(MySystem);
+```
+
+### Types of Systems
+
+Use systems for complex features that require state or background logic:
+
+- **TicketSystem**: Manages tickets, interacts with buttons, handles transcripts
+- **WelcomeSystem**: Generates welcome images, checks DB config
+- **LevelingSystem**: Tracks XP, manages debouncing, syncs to DB
+- **GiveawaySystem**: Uses job queues to end giveaways at specific times
+
+---
+
+## Component System
+
+The component system handles buttons, select menus, and modals. Components can be **dynamic** (temporary) or **persistent** (survive bot restarts).
+
+### Architecture
+
+```
+ComponentHandler      # Dispatches interactions (checks persistent first, then dynamic)
+ComponentRegistry     # Stores persistent components and factories
+ComponentManager      # Manages component lifecycle (timeouts, cleanup)
+```
+
+### Dynamic Components
+
+Dynamic components are created on-demand and stored in memory. They're lost when the bot restarts.
+
+**Use for**: Temporary interactions, user-specific actions, one-time confirmations
+
+#### Creating a Dynamic Button
+
+```typescript
+import { BaseButton } from "#modules/components/BaseButton.js";
+import type { ComponentContext } from "#modules/components/ComponentHandler.js";
+import { ButtonStyle } from "@discordjs/core";
+import { componentManager } from "#modules/components/ComponentManager.js";
+
+export class MyButton extends BaseButton {
+  public readonly customId = "my-namespace:my-button";
+  public readonly style = ButtonStyle.Primary;
+  public readonly label = "Click Me!";
+  public readonly once = true; // Optional: one-time use
+
+  async execute(context: ComponentContext): Promise<void> {
+    const { api, interaction, userId } = context;
+
+    await api.interactions.reply(interaction.id, interaction.token, {
+      content: `Hello <@${userId}>! Button clicked!`,
+      flags: 64, // Ephemeral
+    });
+  }
+}
+```
+
+#### Using Dynamic Components in Commands
+
+```typescript
+import { BaseCommand } from "#modules/commands/BaseCommand.js";
+import { componentManager } from "#modules/components/ComponentManager.js";
+import { MyButton } from "#modules/components/impl/util/MyButton.js";
+import { BaseButton } from "#modules/components/BaseButton.js";
+
+export class MyCommand extends BaseCommand {
+  async execute(context: CommandContext): Promise<void> {
+    const { api, interaction } = context;
+
+    // Create and register component
+    const button = new MyButton();
+    componentManager.registerComponent(button, {
+      timeout: 30 * 60 * 1000, // 30 minutes
+      metadata: { originalUserId: context.userId },
+    });
+
+    // Send message with component
+    await api.interactions.reply(interaction.id, interaction.token, {
+      content: "Click the button below:",
+      components: [BaseButton.createRow(button)],
+    });
+  }
+}
+```
+
+### Persistent Components
+
+Persistent components are registered at bot startup and survive restarts. They're always available.
+
+**Use for**: System-wide buttons (ticket creation, permanent features), components that should work after restarts
+
+#### Registering Persistent Components
+
+**Option 1: Direct Registration** (for components with fixed customId):
+
+```typescript
+// In src/index.ts
+import { componentRegistry } from "#modules/components/ComponentRegistry.js";
+import { MyPersistentButton } from "#modules/components/impl/util/MyPersistentButton.js";
+
+// Register persistent component
+componentRegistry.register(new MyPersistentButton());
+```
+
+**Option 2: Factory Registration** (for components with dynamic parameters):
+
+```typescript
+// In src/index.ts
+import { componentRegistry } from "#modules/components/ComponentRegistry.js";
+import { ConfirmButtonFactory } from "#modules/components/impl/util/ConfirmButton.js";
+
+// Register factory for components with dynamic customIds
+componentRegistry.registerFactory(new ConfirmButtonFactory());
+```
+
+### Component Factories
+
+Factories create component instances from `customId` patterns. They allow components with dynamic parameters to be persistent.
+
+#### Creating a Component Factory
+
+```typescript
+import type { ComponentFactory } from "#modules/components/ComponentFactory.js";
+import { ConfirmButton } from "./ConfirmButton.js";
+
+export class ConfirmButtonFactory implements ComponentFactory<ConfirmButton> {
+  private readonly PATTERN = /^util:confirm:(.+?)(?::(success|danger))?$/;
+
+  canHandle(customId: string): boolean {
+    return this.PATTERN.test(customId);
+  }
+
+  create(customId: string, context?: any): ConfirmButton {
+    const match = customId.match(this.PATTERN);
+    if (!match) {
+      throw new Error(`Invalid customId format: ${customId}`);
+    }
+
+    const action = match[1];
+    const style = (match[2] as "success" | "danger" | undefined) || "success";
+    const metadata = context?.metadata;
+
+    return new ConfirmButton(action, style, metadata);
+  }
+
+  getPattern(): string {
+    return "util:confirm";
+  }
+}
+```
+
+**How it works:**
+
+1. Factory is registered at startup: `componentRegistry.registerFactory(new ConfirmButtonFactory())`
+2. When a button with `customId: "util:confirm:delete-message"` is clicked
+3. `ComponentHandler` checks `ComponentRegistry`
+4. Factory detects the pattern and creates a `ConfirmButton` instance
+5. Component executes normally
+
+**CustomId Format Examples:**
+
+- `util:confirm:delete-message` → Creates ConfirmButton with action="delete-message", style="success"
+- `util:confirm:delete-message:danger` → Creates ConfirmButton with action="delete-message", style="danger"
+- `util:confirm:test-success` → Creates ConfirmButton with action="test-success", style="success" (inferred)
+
+### Component Custom ID Format
+
+Components use a namespace-based custom ID system:
+
+- **Format**: `"namespace:component-id[:params]"`
+- **Examples**: 
+  - `leveling:claim-reward` (persistent, fixed)
+  - `ticket:close-btn` (persistent, fixed)
+  - `util:confirm:delete-message` (persistent, factory)
+  - `test:button:abc123` (dynamic, temporary)
+
+### Component Context
+
+```typescript
+interface ComponentContext {
+  interaction: any;        // Raw interaction data
+  api: any;               // Discord API instance
+  guildId?: string;       // Server ID (if in guild)
+  userId: string;         // User who clicked/interacted
+  channelId?: string;      // Channel ID
+  message?: any;          // Original message (if applicable)
+  customId: string;       // Component's custom ID
+  values?: string[];      // Selected values (for select menus)
+  componentType: number;  // Component type constant
+}
+```
+
+### Component Manager Features
+
+```typescript
+import { componentManager } from "#modules/components/ComponentManager.js";
+
+// Get component statistics
+const stats = componentManager.getComponentStats("my-namespace:my-button");
+
+// Get all components by namespace
+const components = componentManager.getComponentsByNamespace("my-namespace");
+
+// Check if component is expired
+const expired = componentManager.isComponentExpired("my-namespace:my-button");
+
+// Unregister a component
+componentManager.unregisterComponent("my-namespace:my-button");
+```
+
+### Best Practices for Components
+
+#### ✅ DO
+
+1. **Use meaningful namespaces** (`leveling:`, `ticket:`, `util:`)
+2. **Use persistent components** for system-wide features
+3. **Use dynamic components** for temporary, user-specific actions
+4. **Implement proper validation** in the `validate()` method
+5. **Handle errors gracefully** with user-friendly messages
+6. **Use ephemeral responses** for sensitive operations
+7. **Set appropriate timeouts** for temporary components
+
+#### ❌ DON'T
+
+1. **Never hardcode user IDs** - use metadata or validation
+2. **Never ignore component validation** - always check permissions/context
+3. **Never create long-lived dynamic components** - use persistent components instead
+4. **Never use generic custom IDs** - be specific to avoid conflicts
+5. **Never forget to handle component errors** - users will see failures
+
+---
+
+## Database & Repositories
+
+The project uses Prisma ORM with a repository pattern for data access.
+
+### Creating a Repository
+
+```typescript
+import { BaseRepository } from "#infrastructure/database/repositories/BaseRepository.js";
+import { prisma } from "#infrastructure/database/prisma.js";
+import { cacheService } from "#infrastructure/cache/CacheService.js";
+import type { Prisma } from "../generated/prisma/client.js";
+
+export class MyRepository extends BaseRepository<
+  MyModel,                           // Model type
+  Prisma.MyModelCreateInput,         // Create input type
+  Prisma.MyModelUpdateInput          // Update input type
+> {
+  constructor() {
+    super(
+      "myModel",                     // Model name (for cache keys)
+      prisma,                        // Prisma client
+      cacheService,                  // Cache service
+      {
+        enableCache: true,           // Enable caching
+        cacheTTL: 1800,              // Cache TTL in seconds (30 min)
+        cacheNamespace: "myModel",   // Cache namespace
+      }
+    );
+  }
+
+  async findById(id: string): Promise<MyModel | null> {
+    if (this.options.enableCache) {
+      return await this.cache.getOrSet(
+        this.getCacheKey(id),
+        async () => {
+          return await this.prisma.myModel.findUnique({
+            where: { id },
+          });
+        },
+        {
+          ttl: this.options.cacheTTL,
+          namespace: this.options.cacheNamespace,
+        }
+      );
+    }
+
+    return await this.prisma.myModel.findUnique({
+      where: { id },
+    });
+  }
+
+  async findAll(): Promise<MyModel[]> {
+    return await this.prisma.myModel.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async create(data: Prisma.MyModelCreateInput): Promise<MyModel> {
+    const model = await this.prisma.myModel.create({ data });
+    
+    // Invalidate cache if needed
+    if (this.options.enableCache) {
+      await this.invalidateAllCache();
+    }
+    
+    return model;
+  }
+
+  async update(id: string, data: Prisma.MyModelUpdateInput): Promise<MyModel> {
+    const model = await this.prisma.myModel.update({
+      where: { id },
+      data,
+    });
+
+    // Invalidate cache for this specific item
+    if (this.options.enableCache) {
+      await this.invalidateCache(id);
+    }
+
+    return model;
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.prisma.myModel.delete({
+      where: { id },
+    });
+
+    // Invalidate cache
+    if (this.options.enableCache) {
+      await this.invalidateCache(id);
+    }
+  }
+}
+```
+
+### Using Repositories
+
+```typescript
+import { container } from "#core/Container.js";
+import { MyRepository } from "#infrastructure/database/repositories/MyRepository.js";
+
+// In Bot.ts or during registration
+container.registerSingleton("MyRepository", () => new MyRepository());
+
+// In commands, events, or systems
+const myRepo = await container.resolve<MyRepository>("MyRepository");
+
+// Use the repository
+const model = await myRepo.findById("123");
+const all = await myRepo.findAll();
+const created = await myRepo.create({ name: "Test" });
+const updated = await myRepo.update("123", { name: "Updated" });
+await myRepo.delete("123");
+```
+
+### Transactions
+
+```typescript
+await myRepo.transaction(async (tx) => {
+  const model1 = await tx.myModel.create({ data: { name: "Model 1" } });
+  const model2 = await tx.myModel.create({ data: { name: "Model 2" } });
+  return { model1, model2 };
+});
+```
+
+---
+
+## Cache System
+
+The cache system uses Redis for distributed caching with automatic serialization.
+
+### Using Cache Service
+
+```typescript
+import { cacheService } from "#infrastructure/cache/CacheService.js";
+
+// Set a value
+await cacheService.set("user:123", { name: "John", age: 30 }, {
+  ttl: 3600,              // Time to live in seconds (1 hour)
+  namespace: "users",      // Optional namespace
+});
+
+// Get a value
+const user = await cacheService.get<{ name: string; age: number }>("user:123", {
+  namespace: "users",
+});
+
+// Check if key exists
+const exists = await cacheService.exists("user:123", { namespace: "users" });
+
+// Delete a value
+await cacheService.delete("user:123", { namespace: "users" });
+
+// Delete by pattern
+const deleted = await cacheService.deletePattern("user:*", { namespace: "users" });
+
+// Increment a counter
+const count = await cacheService.increment("views:page:123", {
+  ttl: 86400, // 24 hours
+  namespace: "analytics",
+});
+
+// Get or set pattern (cache-aside)
+const data = await cacheService.getOrSet(
+  "expensive:operation:123",
+  async () => {
+    // This function only runs on cache miss
+    return await expensiveDatabaseQuery();
+  },
+  {
+    ttl: 1800, // 30 minutes
+    namespace: "operations",
+  }
+);
+```
+
+### Cache Best Practices
+
+1. **Use namespaces** to organize cache keys
+2. **Set appropriate TTLs** based on data freshness requirements
+3. **Use `getOrSet`** for cache-aside pattern
+4. **Invalidate cache** when data is updated
+5. **Use cache for expensive operations** (DB queries, API calls)
+
+---
+
+## Dependency Injection
+
+The project uses a simple DI container for managing service lifetimes.
+
+### Registering Services
+
+```typescript
+import { container } from "#core/Container.js";
+import { MyService } from "./MyService.js";
+import { MyRepository } from "./MyRepository.js";
+
+// Register as singleton (one instance shared across all requests)
+container.registerSingleton("MyService", () => new MyService());
+
+// Register as transient (new instance every time)
+container.registerTransient("MyService", () => new MyService());
+
+// Register with dependencies
+container.registerSingleton("MyRepository", () => new MyRepository());
+container.registerSingleton("MyService", () => {
+  const repo = container.resolveSync<MyRepository>("MyRepository");
+  return new MyService(repo);
+});
+```
+
+### Resolving Services
+
+```typescript
+import { container } from "#core/Container.js";
+import { MyService } from "./MyService.js";
+
+// Resolve asynchronously (recommended)
+const service = await container.resolve<MyService>("MyService");
+
+// Resolve synchronously (only for already-instantiated singletons)
+const service = container.resolveSync<MyService>("MyService");
+
+// Check if service exists
+if (container.has("MyService")) {
+  const service = await container.resolve<MyService>("MyService");
+}
+```
+
+### Service Registration in Bot.ts
+
+Services are typically registered in `Bot.ts` during startup:
+
+```typescript
+// In Bot.ts registerDependencies()
+container.registerSingleton("GuildRepository", () => new GuildRepository());
+container.registerSingleton("ModerationConfigRepository", () => new ModerationConfigRepository());
+container.registerSingleton("CommandHandler", () => new CommandHandler());
+```
+
+---
+
+## Configuration
+
+Configuration is managed through environment variables with validation.
+
+### Environment Variables
+
+Required variables (defined in `.env`):
+
+```env
+NODE_ENV=development                    # development | production | test
+DISCORD_TOKEN=your_bot_token           # Discord bot token
+DISCORD_CLIENT_ID=your_client_id      # Discord application ID
+DATABASE_URL=postgresql://...          # PostgreSQL connection string
+REDIS_URL=redis://localhost:6379      # Redis connection string
+LOG_LEVEL=info                         # trace | debug | info | warn | error | fatal
+```
+
+### Using Config
+
+```typescript
+import { config } from "#core/Config.js";
+
+// Get a config value
+const token = config.get("DISCORD_TOKEN");
+const clientId = config.get("DISCORD_CLIENT_ID");
+const env = config.get("NODE_ENV");
+
+// Config is validated at startup - invalid configs will throw errors
 ```
 
 ---
@@ -496,21 +972,27 @@ await api.interactions.reply(interaction.id, interaction.token, {
 ### Cooldown Manager
 
 ```typescript
-import { cooldownManager } from '#shared/utils/cooldown.js';
+import { cooldownManager } from "#shared/utils/cooldown.js";
 
 // In your command
 async execute(context: CommandContext): Promise<void> {
-  // Check cooldown
-  const onCooldown = await cooldownManager.checkCooldown(
-    this.meta.name,
-    context.userId,
-    this.meta.cooldown ?? 0
-  );
-
-  if (onCooldown) {
+  try {
+    // Check cooldown (throws if on cooldown)
+    await cooldownManager.checkCooldown(
+      this.meta.name,
+      context.userId,
+      this.meta.cooldown ?? 0
+    );
+  } catch (error) {
     // User is on cooldown
+    await api.interactions.reply(interaction.id, interaction.token, {
+      content: "You're on cooldown!",
+      flags: 64, // Ephemeral
+    });
     return;
   }
+
+  // Execute command logic...
 
   // Set cooldown after execution
   await cooldownManager.setCooldown(
@@ -526,23 +1008,12 @@ async execute(context: CommandContext): Promise<void> {
 ```typescript
 import { logger } from "#core/Logger.js";
 
+// Structured logging with context
 logger.info({ userId, guildId }, "Command executed");
-logger.error({ error }, "Something went wrong");
+logger.error({ error, command: "ping" }, "Command failed");
 logger.debug({ data }, "Debug information");
 logger.warn({ warning }, "Warning message");
-```
-
-### Container (Dependency Injection)
-
-```typescript
-import { container } from "#core/Container.js";
-import { GuildRepository } from "#infrastructure/database/repositories/GuildRepository.js";
-
-// Resolve a dependency
-const guildRepo = await container.resolve<GuildRepository>("GuildRepository");
-
-// Use the repository
-const guild = await guildRepo.findById(guildId);
+logger.fatal({ error }, "Fatal error occurred");
 ```
 
 ---
@@ -558,14 +1029,21 @@ const guild = await guildRepo.findById(guildId);
 5. **Set appropriate cooldowns** to prevent spam
 6. **Log important actions** for debugging
 7. **Use dependency injection** for services/repositories
+8. **Use persistent components** for system-wide features
+9. **Use dynamic components** for temporary, user-specific actions
+10. **Invalidate cache** when data is updated
+11. **Use transactions** for multi-step database operations
 
 ### ❌ DON'T
 
-1. **Never create `new REST()` or `new API()`** in commands/events
+1. **Never create `new REST()` or `new API()`** in commands/events/components
 2. **Never hardcode tokens** - use `config.get()`
 3. **Never ignore errors** - at minimum log them
 4. **Never use `any` type** when proper types exist
 5. **Never make commands that don't respond** - Discord requires a response within 3 seconds
+6. **Never create long-lived dynamic components** - use persistent components instead
+7. **Never bypass the repository pattern** - always use repositories for database access
+8. **Never cache sensitive data** without encryption
 
 ### Response Timing
 
@@ -599,11 +1077,11 @@ The `context` object passed to commands contains:
 ```typescript
 interface CommandContext {
   interaction: ChatInputInteraction; // Raw interaction data
-  api: API; // Discord API instance
-  guildId: string; // Server ID
-  userId: string; // User who ran the command
-  channelId: string; // Channel where command was run
-  options: Map<string, any>; // Command options (flattened)
+  api: API;                           // Discord API instance
+  guildId: string;                   // Server ID
+  userId: string;                     // User who ran the command
+  channelId: string;                 // Channel where command was run
+  options: Map<string, any>;          // Command options (flattened)
 }
 ```
 
@@ -625,243 +1103,8 @@ const channelId = context.options.get("channel") as string;
 src/modules/commands/impl/
 ├── <category>/
 │   ├── index.ts           # Parent command (if has subcommands)
-│   ├── <command>.ts       # Standalone command or subcommand
+│   ├── <command>.ts      # Standalone command or subcommand
 │   └── <group>/
-```
-
----
-
-## Component System (Buttons, Select Menus, Modals)
-
-### Architecture Overview
-
-The component system follows SOLID principles with clear separation of concerns:
-
-```
-src/modules/components/
-├── ComponentHandler.ts      # Factory pattern for component management
-├── ComponentManager.ts      # Advanced lifecycle management with caching
-├── BaseComponent.ts          # Abstract base class for all components
-├── BaseButton.ts             # Base class for button components
-├── BaseSelectMenu.ts         # Base class for select menu components
-└── impl/
-    └── <category>/
-        └── <component>.ts      # Concrete component implementations
-```
-
-### Creating a Button Component
-
-```typescript
-import { BaseButton } from "#modules/components/BaseButton.js";
-import type { ComponentContext } from "#modules/components/ComponentHandler.js";
-import { ButtonStyle } from "@discordjs/core";
-
-export class MyButton extends BaseButton {
-  public readonly customId = "my-namespace:my-button";
-  public readonly style = ButtonStyle.Primary;
-  public readonly label = "Click Me!";
-  public readonly once = true; // Optional: one-time use
-
-  async execute(context: ComponentContext): Promise<void> {
-    const { api, interaction, userId } = context;
-
-    await api.interactions.reply(interaction.id, interaction.token, {
-      content: `Hello <@${userId}>! Button clicked!`,
-      flags: 64, // Ephemeral
-    });
-  }
-}
-```
-
-### Creating a Select Menu Component
-
-```typescript
-import { StringSelectMenu } from "#modules/components/BaseSelectMenu.js";
-import type { ComponentContext } from "#modules/components/ComponentHandler.js";
-
-export class MySelectMenu extends StringSelectMenu {
-  public readonly customId = "my-namespace:my-select";
-  public readonly placeholder = "Choose an option...";
-  public readonly minValues = 1;
-  public readonly maxValues = 3;
-
-  public readonly options = [
-    { label: "Option 1", value: "opt1", description: "First option" },
-    { label: "Option 2", value: "opt2", description: "Second option" },
-  ];
-
-  async execute(context: ComponentContext): Promise<void> {
-    const { api, interaction, userId, values } = context;
-
-    await api.interactions.reply(interaction.id, interaction.token, {
-      content: `<@${userId}> selected: ${values?.join(", ")}`,
-    });
-  }
-}
-```
-
-### Component Context
-
-```typescript
-interface ComponentContext {
-  interaction: any;        // Raw interaction data
-  api: any;                // Discord API instance
-  guildId?: string;        // Server ID (if in guild)
-  userId: string;          // User who clicked/interacted
-  channelId?: string;      // Channel ID
-  message?: any;           // Original message (if applicable)
-  customId: string;        // Component's custom ID
-  values?: string[];         // Selected values (for select menus)
-  componentType: number;   // Component type constant
-}
-```
-
-### Registering Components
-
-```typescript
-import { componentManager } from "#modules/components/ComponentManager.js";
-import { MyButton } from "#modules/components/impl/util/MyButton.js";
-
-// Simple registration
-const button = new MyButton();
-componentManager.registerComponent(button);
-
-// Advanced registration with options
-componentManager.registerComponent(button, {
-  timeout: 30 * 60 * 1000, // 30 minutes
-  metadata: { 
-    originalUserId: "123456789", 
-    someData: "value" 
-  }
-});
-```
-
-### Using Components in Commands
-
-```typescript
-import { BaseCommand } from "#modules/commands/BaseCommand.js";
-import { componentManager } from "#modules/components/ComponentManager.js";
-import { MyButton } from "#modules/components/impl/util/MyButton.js";
-
-export class MyCommand extends BaseCommand {
-  async execute(context: CommandContext): Promise<void> {
-    const { api, interaction } = context;
-
-    // Create and register component
-    const button = new MyButton();
-    componentManager.registerComponent(button);
-
-    // Send message with component
-    await api.interactions.reply(interaction.id, interaction.token, {
-      content: "Click the button below:",
-      components: [
-        {
-          type: 1, // ActionRow
-          components: [button.build()]
-        }
-      ]
-    });
-  }
-}
-```
-
-### Component Custom ID Format
-
-Components use a namespace-based custom ID system:
-
-- Format: `"namespace:component-id[:metadata-hash]"`
-- Examples: `"leveling:claim-reward"`, `"ticket:close-btn"`, `"util:confirm:abc123"`
-- Metadata hash is automatically generated for components with metadata
-
-### Component Manager Features
-
-```typescript
-// Get component statistics
-const stats = componentManager.getComponentStats("my-namespace:my-button");
-
-// Get all components by namespace
-const components = componentManager.getComponentsByNamespace("my-namespace");
-
-// Check if component is expired
-const expired = componentManager.isComponentExpired("my-namespace:my-button");
-
-// Unregister a component
-componentManager.unregisterComponent("my-namespace:my-button");
-```
-
-### Best Practices for Components
-
-### ✅ DO
-
-1. **Use meaningful namespaces** for organization (`leveling:`, `ticket:`, `util:`)
-2. **Implement proper validation** in the `validate()` method
-3. **Handle errors gracefully** with user-friendly messages
-4. **Use ephemeral responses** for sensitive operations
-5. **Set appropriate timeouts** for temporary components
-6. **Log component usage** for debugging and analytics
-7. **Use the factory pattern** with static methods for complex components
-
-### ❌ DON'T
-
-1. **Never hardcode user IDs** - use metadata or validation
-2. **Never ignore component validation** - always check permissions/context
-3. **Never create long-lived components** without proper cleanup
-4. **Never use generic custom IDs** - be specific to avoid conflicts
-5. **Never forget to handle component errors** - users will see failures
-
-### Advanced Component Patterns
-
-#### Confirmation Dialog Pattern
-
-```typescript
-// Create confirm/cancel button pair
-const [confirmBtn, cancelBtn] = ConfirmButton.createConfirmPair(
-  "delete-message",
-  userId,
-  { messageId: "123456" }
-);
-
-// Register both buttons
-componentManager.registerComponent(confirmBtn);
-componentManager.registerComponent(cancelBtn);
-
-// Send with both buttons
-const row = BaseButton.createRow(confirmBtn, cancelBtn);
-```
-
-#### Dynamic Select Menu Pattern
-
-```typescript
-// Create select menu with dynamic options
-const selectMenu = new StringSelectMenu();
-selectMenu.options = await generateDynamicOptions();
-
-// Register and use
-componentManager.registerComponent(selectMenu);
-```
-
-#### Component with External API
-
-```typescript
-export class WeatherButton extends BaseButton {
-  async execute(context: ComponentContext): Promise<void> {
-    const { api, interaction, userId } = context;
-    
-    // Defer for long operations
-    await api.interactions.defer(interaction.id, interaction.token);
-    
-    // Fetch external data
-    const weather = await fetchWeather(this.metadata.city);
-    
-    // Edit with results
-    await api.interactions.editReply(
-      interaction.application_id,
-      interaction.token,
-      { content: `Weather in ${weather.city}: ${weather.temp}°C` }
-    );
-  }
-}
-```
 │       └── <subcommand>.ts  # Nested subcommand
 ```
 
@@ -870,3 +1113,47 @@ Examples:
 - `/ping` → `impl/util/ping.ts`
 - `/config` → `impl/config/index.ts`
 - `/config message welcomecard` → `impl/config/message/welcomecard.ts`
+
+---
+
+## Quick Reference
+
+### Registration Checklist
+
+When creating a new feature:
+
+1. ✅ Create command/event/system/component file
+2. ✅ Import in `src/index.ts`
+3. ✅ Register in `src/index.ts` bootstrap function
+4. ✅ For commands: Register with Discord using `bot.registerCommands()`
+5. ✅ For persistent components: Register in `componentRegistry`
+6. ✅ For repositories: Register in `container` (Bot.ts)
+
+### Common Patterns
+
+**Command with Database + Cache:**
+```typescript
+const repo = await container.resolve<GuildRepository>("GuildRepository");
+const guild = await repo.findById(guildId);
+```
+
+**Command with Component:**
+```typescript
+const button = new MyButton();
+componentManager.registerComponent(button);
+await api.interactions.reply(..., { components: [BaseButton.createRow(button)] });
+```
+
+**System with Event Subscription:**
+```typescript
+eventHandler.register(new MySystemEvent(this));
+```
+
+**Cache-Aside Pattern:**
+```typescript
+const data = await cacheService.getOrSet("key", async () => await fetchData(), { ttl: 3600 });
+```
+
+---
+
+This guide should help you develop features without needing to read the source code. For specific implementation details, refer to the actual code files.
