@@ -1,7 +1,7 @@
 import { GatewayIntentBits } from '@discordjs/core';
 import { Bot } from '#client/Bot.js';
 
-const DEVELOPMENT_GUILD_ID = process.env.DEVELOPMENT_GUILD_ID || '739306480586588241';
+const DEVELOPMENT_GUILD_ID = process.env.DEVELOPMENT_GUILD_ID;
 import { config } from '#core/Config.js';
 import { logger } from '#core/Logger.js';
 
@@ -143,9 +143,9 @@ async function bootstrap() {
       process.exit(1);
     });
 
-    // Register commands with Discord (optional: pass guildId for instant updates during dev)
-    // For production, remove the guildId parameter to register globally
-    await bot.registerCommands('739306480586588241');
+    // Register commands with Discord (guild commands for instant updates during dev,
+    // global registration when DEVELOPMENT_GUILD_ID is not set)
+    await bot.registerCommands(DEVELOPMENT_GUILD_ID);
     
     logger.info('💡 Tip: Run bot.registerCommands(guildId) to register slash commands');
   } catch (error) {
