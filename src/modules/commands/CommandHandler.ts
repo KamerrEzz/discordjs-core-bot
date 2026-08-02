@@ -83,8 +83,14 @@ export class CommandHandler {
         'Executing command'
       );
 
+      // Check cooldown before executing
+      await command.checkCooldown(context.userId);
+
       // Route to appropriate handler (main command or subcommand)
       await command.route(context);
+
+      // Set cooldown after successful execution
+      await command.setCooldown(context.userId);
       
       logger.info(
         { 

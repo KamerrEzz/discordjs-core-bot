@@ -173,18 +173,18 @@ export abstract class BaseCommand {
   }
 
   /**
-   * Check cooldown
+   * Check cooldown - call before executing the command
    */
-  protected async checkCooldown(userId: string): Promise<void> {
+  public async checkCooldown(userId: string): Promise<void> {
     if (this.meta.cooldown) {
       await cooldownManager.checkCooldown(this.meta.name, userId, this.meta.cooldown);
     }
   }
 
   /**
-   * Set cooldown
+   * Set cooldown - call after successful execution
    */
-  protected async setCooldown(userId: string): Promise<void> {
+  public async setCooldown(userId: string): Promise<void> {
     if (this.meta.cooldown) {
       await cooldownManager.setCooldown(this.meta.name, userId, this.meta.cooldown);
     }

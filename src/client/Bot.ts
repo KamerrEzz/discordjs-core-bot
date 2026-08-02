@@ -21,6 +21,13 @@ import { SystemManager } from '#modules/systems/SystemManager.js';
 import { componentManager } from '#modules/components/ComponentManager.js';
 
 /**
+ * Sharding environment variables. Populated by sharding.ts when starting the bot
+ * with the sharding manager.
+ */
+const shardId = process.env.SHARD_ID ? Number(process.env.SHARD_ID) : undefined;
+const totalShards = process.env.SHARDS ? Number(process.env.SHARDS) : undefined;
+
+/**
  * Main Bot Client
  * Uses @discordjs/core Client for proper event handling with API context
  */
@@ -39,6 +46,8 @@ export class Bot {
       token: options.token,
       intents: options.intents,
       rest: this.rest,
+      shardCount: totalShards ?? 1,
+      shardIds: shardId !== undefined ? [shardId, (shardId || 0) + 1] : undefined,
     });
     this.systemManager = new SystemManager(this);
     

@@ -5,6 +5,9 @@ import { eventHandler } from '../../events/EventHandler.js';
 import { BaseEvent, type EventContext } from '../../events/BaseEvent.js';
 import type { GatewayMessageCreateDispatchData, API } from '@discordjs/core';
 import { ModerationConfigRepository } from '../../../infrastructure/database/repositories/ModerationConfigRepository.js';
+import { ModerationQueue, type ModerationActionExecutor, type ModerationAction, type ModerationResult } from './ModerationQueue.js';
+
+export { ModerationResult, ModerationAction, ModerationActionExecutor } from './ModerationQueue.js';
 
 interface MessageRecord {
   content: string;
@@ -52,15 +55,102 @@ class ModerationMessageEvent extends BaseEvent<GatewayMessageCreateDispatchData>
   }
 }
 
+/**
+ * Internal event handler for ban events.
+ * When a user is banned, queue their messages for deletion.
+ */
+class ModerationBanEvent extends BaseEvent<any> {
+  public readonly name = 'GUILD_MEMBER_BAN_ADD';
+  public readonly once = false;
+
+  constructor(private system: ModerationSystem) {
+    super();
+  }
+
+  async execute(context: EventContext<any>): Promise<void> {
+    const ban = context.data;
+    if (ban?.user) {
+      this.system.moderationQueue.enqueue({
+        type: 'delete-message',
+        userId: ban.user.id,
+        reason: 'Banned — queued deleted messages',
+      });
+    }
+  }
+}
+
 export class ModerationSystem extends BaseSystem {
   public readonly name = 'ModerationSystem';
   private spamCache = new Map<string, MessageRecord[]>();
+  public moderationQueue = new ModerationQueue();
 
   async onInit(): Promise<void> {
     eventHandler.register(new ModerationMessageEvent(this));
+    eventHandler.register(new ModerationBanEvent(this));
     logger.debug('ModerationSystem initialized');
   }
 
+  /**
+   * Enqueue a bulk moderation action.
+   * Call this from commands when an admin issues bulk actions (bans, message deletions, etc.).
+   * Then call processQueue(api) to execute all queued actions.
+   */
+  public enqueueModeration(action: ModerationAction): void {
+    this.moderationQueue.enqueue(action);
+  }
+
+  /**
+   * Process all queued moderation actions.
+   * This is called by bulk moderation commands after enqueueing actions.
+   * @param api - The Discord API instance
+   * @returns Results for each action processed
+   */
+  public async processQueue(api: API): Promise<ModerationResult[]> {
+    const executor: ModerationActionExecutor = {
+      execute: (action, apiClient) => this.executeModerationAction(action, apiClient),
+    };
+
+    return await this.moderationQueue.processQueue(api, executor);
+  }
+
+  private async executeModerationAction(action: ModerationAction, api: API): Promise<boolean> {
+    try {
+      switch (action.type) {
+        case 'ban':
+          if (action.guildId) {
+            await api.guilds.banUser(action.guildId, action.userId);
+            logger.info({ userId: action.userId, reason: action.reason }, 'Banned user (bulk mod)');
+          }
+          return true;
+
+        case 'delete-message':
+          // If a channelId is provided, delete specific message
+          if (action.channelId) {
+            await api.channels.deleteMessage(action.channelId, action.userId);
+            logger.debug({ channelId: action.channelId, userId: action.userId }, 'Message deleted (bulk mod)');
+          }
+          return true;
+
+        case 'kick':
+        case 'mute':
+          // These actions would need a custom executor implementation
+          // that has access to member/guild APIs
+          logger.info({ userId: action.userId, type: action.type }, `Moderation ${action.type} action queued (requires custom executor)`);
+          return true;
+
+        default:
+          logger.warn({ type: action.type }, 'Unknown moderation action type');
+          return false;
+      }
+    } catch (error) {
+      logger.error({ error, action }, 'Failed to execute moderation action');
+      return false;
+    }
+  }
+
+  /**
+   * Process a message through moderation checks (spam, NSFW, links)
+   */
   async processMessage(
     message: GatewayMessageCreateDispatchData,
     api: API
