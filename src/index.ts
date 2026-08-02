@@ -40,6 +40,9 @@ import { GuildLevelShowCommand } from '#modules/commands/impl/guild/level/show.j
 // Test commands
 import { TestComponentsCommand } from '#modules/commands/impl/test/components.js';
 
+// Moderation commands
+import { BanCommand } from '#modules/commands/impl/moderation/ban.js';
+
 // Import and register persistent components
 import { componentRegistry } from '#modules/components/ComponentRegistry.js';
 import { ConfirmButtonFactory } from '#modules/components/impl/util/ConfirmButton.js';
@@ -70,6 +73,7 @@ async function bootstrap() {
     commandRegistry.register(new PingCommand());
     commandRegistry.register(new ReloadCommand());
     commandRegistry.register(new TestComponentsCommand());
+    commandRegistry.register(new BanCommand());
     
     // Guild level commands: /guild level top|show
     const guildLevelCommand = new GuildLevelCommand();
