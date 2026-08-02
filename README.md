@@ -14,6 +14,8 @@ A production-ready Discord bot built with **@discordjs/core**, TypeScript, and e
 - ✅ **Command System**: Auto-discovery of subcommands and groups
 - ✅ **Event System**: Type-safe Discord event handling
 - ✅ **Graceful Shutdown**: Proper cleanup of connections
+- ✅ **Sharding Support**: Built-in sharding manager for scaling
+- ✅ **Cooldown System**: Per-command cooldowns to prevent abuse
 
 ## 📋 Prerequisites
 
@@ -49,6 +51,7 @@ A production-ready Discord bot built with **@discordjs/core**, TypeScript, and e
    - `DISCORD_CLIENT_ID`: Your Discord application ID
    - `DATABASE_URL`: PostgreSQL connection string
    - `REDIS_URL`: Redis connection string
+   - `DEVELOPMENT_GUILD_ID`: (optional) Guild ID for instant command registration during dev
 
 4. **Generate Prisma client**
 
@@ -86,19 +89,12 @@ pnpm start:shards
 
 ### Register Slash Commands
 
-To register commands with Discord, you have two options:
+Commands are registered on startup via the `DEVELOPMENT_GUILD_ID` env var (guild commands, instant) or globally (production, ~1 hour propagation).
 
-**Guild Commands (Development - Instant)**
-Modify `src/index.ts` and uncomment the line:
+To override the development guild:
 
-```typescript
-await bot.registerCommands("YOUR_DEV_GUILD_ID_HERE");
-```
-
-**Global Commands (Production - Takes ~1 hour)**
-
-```typescript
-await bot.registerCommands(); // No guildId parameter
+```bash
+DEVELOPMENT_GUILD_ID=123456789012345678 pnpm dev
 ```
 
 ## 📁 Project Structure
@@ -106,6 +102,7 @@ await bot.registerCommands(); // No guildId parameter
 ```
 src/
 ├── index.ts                    # Entry point
+├── sharding.ts                 # Sharding manager
 ├── client/
 │   ├── Bot.ts                  # Main bot client
 │   └── types.ts                # Client types
@@ -117,23 +114,70 @@ src/
 │   ├── database/
 │   │   ├── prisma.ts           # Prisma singleton
 │   │   └── repositories/       # Data access layer
-│   └── cache/
-│       ├── RedisClient.ts      # Redis connection
-│       └── CacheService.ts     # Cache abstraction
+│   ├── cache/
+│   │   ├── RedisClient.ts      # Redis connection
+│   │   └── CacheService.ts     # Cache abstraction
+│   └── queue/
+│       └── JobQueue.ts         # Redis-based job queue
 ├── modules/
 │   ├── commands/
-│   │   ├── BaseCommand.ts      # Command base class
+│   │   ├── BaseCommand.ts      # Command base class (with cooldowns)
 │   │   ├── CommandHandler.ts   # Command orchestrator
 │   │   ├── CommandRegistry.ts  # Command storage
 │   │   └── impl/               # Command implementations
-│   └── events/
-│       ├── BaseEvent.ts        # Event base class
-│       ├── EventHandler.ts     # Event orchestrator
-│       └── impl/               # Event implementations
+│   ├── components/
+│   │   ├── ComponentHandler.ts # Button/modal handler
+│   │   ├── ComponentRegistry.ts# Persistent component storage
+│   │   └── impl/               # Component implementations
+│   ├── events/
+│   │   ├── BaseEvent.ts        # Event base class
+│   │   ├── EventHandler.ts     # Event orchestrator
+│   │   └── impl/               # Event implementations
+│   └── systems/
+│       ├── BaseSystem.ts       # System base class
+│       ├── SystemManager.ts    # System lifecycle manager
+│       └── impl/               # System implementations
 └── shared/
     ├── errors/                 # Custom error classes
     ├── types/                  # Shared types
     └── utils/                  # Utilities
+```
+
+## 📋 Registered Commands
+
+The following commands are **actively registered** as Discord slash commands:
+
+| Command | Description |
+|---------|-------------|
+| `/ping` | Bot latency check |
+| `/reload` | Hot-reload commands (admin only) |
+| `/test-components` | Test button/modal interactions |
+| `/guild level top` | Show top leveling users (server-level) |
+| `/guild level show` | Show your leveling stats |
+| `/config message welcomecard` | Configure welcome card settings |
+| `/config moderation spamming` | Toggle anti-spam protection |
+| `/config moderation links` | Toggle anti-links protection |
+| `/config moderation nsfw` | Toggle anti-NSFW protection |
+| `/config moderation logchannel` | Set moderation log channel |
+| `/config leveling toggle` | Enable/disable leveling system |
+| `/config leveling xp-rate` | Set XP rate multiplier |
+| `/config leveling reset-user` | Reset a user's XP |
+| `/config leveling set-level` | Set a user's level |
+| `/config leveling role-reward` | Set level-locked role rewards |
+
+## 📋 Available but Not Registered
+
+The following commands have implementation code but are **not yet registered** as Discord slash commands:
+
+| Command | File | Reason |
+|---------|------|--------|
+| (unregistered commands) | `src/modules/commands/impl/` | Need registration in `src/index.ts` |
+
+To register a command, add it to the bootstrap function in `src/index.ts`:
+
+```typescript
+import { MyCommand } from "#modules/commands/impl/mycommand.js";
+commandRegistry.register(new MyCommand());
 ```
 
 ## 🔧 Adding New Commands
@@ -150,7 +194,7 @@ export class MyCommand extends BaseCommand {
     name: "mycommand",
     description: "My custom command",
     category: "general",
-    cooldown: 5,
+    cooldown: 5, // seconds
   };
 
   async execute(context: CommandContext): Promise<void> {
@@ -177,6 +221,18 @@ parentCommand.registerSubcommand(new SubcommandA());
 parentCommand.registerSubcommandGroup("groupname", new SubcommandB());
 
 commandRegistry.register(parentCommand);
+```
+
+### Cooldowns
+
+Commands can define a `cooldown` (in seconds) in their metadata. The `CommandHandler` automatically checks cooldowns before execution and sets them after successful execution.
+
+```typescript
+public readonly meta = {
+  name: "mycommand",
+  description: "My custom command",
+  cooldown: 10, // 10 second cooldown per user
+};
 ```
 
 ## 🎪 Adding New Events
@@ -229,6 +285,9 @@ pnpm lint
 
 # Build for production
 pnpm build
+
+# Run smoke tests
+pnpm test
 ```
 
 ## 🏗️ Architecture Patterns
@@ -274,18 +333,14 @@ export class MySystem extends BaseSystem {
 }
 ```
 
-### Job Queue (Decoupling)
+### Moderation Queue
 
-For heavy tasks (transcriptions, giveaways) that shouldn't block the bot:
+The ModerationSystem includes a FIFO queue for bulk moderation operations (bans, kicks, mutes). Enqueue actions and process them sequentially:
 
 ```typescript
-// Producer
-await jobQueue.add("transcribe-meeting", { voiceChannelId: "..." });
-
-// Consumer
-await jobQueue.process(async (job) => {
-  // Handle heavy task
-});
+const system = bot.getSystemManager().get<ModerationSystem>('ModerationSystem');
+system.enqueueModeration({ type: 'ban', userId: '123', reason: 'Spam' });
+const results = await system.processQueue(api);
 ```
 
 ## 🚦 Environment Variables
@@ -298,6 +353,28 @@ await jobQueue.process(async (job) => {
 | `DATABASE_URL`      | PostgreSQL URL | Yes      | -             |
 | `REDIS_URL`         | Redis URL      | Yes      | -             |
 | `LOG_LEVEL`         | Logging level  | No       | `info`        |
+| `DEVELOPMENT_GUILD_ID` | Dev guild for instant command registration | No | Hardcoded fallback |
+| `SHARDS`            | Total shards (set by sharding manager) | No | 1 |
+| `SHARD_ID`          | Shard ID (set by sharding manager) | No | 0 |
+
+## 🐳 Docker
+
+```bash
+# Build the Docker image
+pnpm docker:build
+
+# Run the container
+pnpm docker:run
+```
+
+## 🚦 CI/CD
+
+This project uses GitHub Actions with the following pipeline:
+
+- **lint** — runs ESLint on the `src/` directory
+- **typecheck** — runs `tsc --noEmit`
+- **build** — compiles TypeScript (depends on lint and typecheck passing)
+- **test** — runs Node.js smoke tests (depends on build)
 
 ## 📝 License
 

@@ -52,7 +52,7 @@ export class ComponentHandler {
 
     // If not found in persistent registry, try dynamic components
     if (!component) {
-      component = this.components.get(customId);
+      component = this.components.get(customId) || null;
     }
 
     if (!component) {

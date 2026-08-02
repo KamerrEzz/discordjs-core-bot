@@ -1,5 +1,7 @@
 import { GatewayIntentBits } from '@discordjs/core';
 import { Bot } from '#client/Bot.js';
+
+const DEVELOPMENT_GUILD_ID = process.env.DEVELOPMENT_GUILD_ID || '739306480586588241';
 import { config } from '#core/Config.js';
 import { logger } from '#core/Logger.js';
 
@@ -82,6 +84,8 @@ async function bootstrap() {
     configCommand.registerSubcommandGroup('message', new WelcomeCardSubcommand());
     
     // Moderation group: /config moderation spamming|links|nsfw|logchannel
+    configCommand.registerSubcommandGroup('moderation', new SpammingSubcommand());
+    configCommand.registerSubcommandGroup('moderation', new LinksSubcommand());
     configCommand.registerSubcommandGroup('moderation', new NsfwSubcommand());
     configCommand.registerSubcommandGroup('moderation', new LogChannelSubcommand());
     
