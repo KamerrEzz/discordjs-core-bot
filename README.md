@@ -353,7 +353,7 @@ const results = await system.processQueue(api);
 | `DATABASE_URL`      | PostgreSQL URL | Yes      | -             |
 | `REDIS_URL`         | Redis URL      | Yes      | -             |
 | `LOG_LEVEL`         | Logging level  | No       | `info`        |
-| `DEVELOPMENT_GUILD_ID` | Dev guild for instant command registration | No | Hardcoded fallback |
+| `DEVELOPMENT_GUILD_ID` | Dev guild for instant command registration | No | None (global registration) |
 | `SHARDS`            | Total shards (set by sharding manager) | No | 1 |
 | `SHARD_ID`          | Shard ID (set by sharding manager) | No | 0 |
 
