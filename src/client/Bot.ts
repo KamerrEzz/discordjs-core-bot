@@ -47,7 +47,7 @@ export class Bot {
       intents: options.intents,
       rest: this.rest,
       shardCount: totalShards ?? 1,
-      shardIds: shardId !== undefined ? [shardId, (shardId || 0) + 1] : undefined,
+      shardIds: shardId !== undefined ? [shardId] : undefined,
     });
     this.systemManager = new SystemManager(this);
     
