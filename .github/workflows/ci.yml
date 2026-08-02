@@ -17,6 +17,7 @@ jobs:
           node-version: 24
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - run: pnpm lint
 
   typecheck:
@@ -29,6 +30,7 @@ jobs:
           node-version: 24
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - run: pnpm typecheck
 
   build:
@@ -42,6 +44,7 @@ jobs:
           node-version: 24
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - run: pnpm build
 
   test:
@@ -54,5 +57,6 @@ jobs:
           node-version: 24
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
       - run: pnpm build
       - run: node --test tests/*.test.ts
