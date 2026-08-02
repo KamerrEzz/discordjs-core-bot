@@ -71,4 +71,11 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
         run: pnpm db:generate
       - run: pnpm build
-      - run: node --test tests/*.test.ts
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          DISCORD_TOKEN: ci-dummy-token
+          DISCORD_CLIENT_ID: ci-dummy-client
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          REDIS_URL: redis://localhost:6379
+        run: node --test tests/*.test.ts
